@@ -1,0 +1,15 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+datarootdir=@prefix@/share
+datadir=@datadir@
+
+Name: MAPI admin library
+Description: Library supporting MAPI administration actions
+Version: @PACKAGE_VERSION@
+Libs: -L${libdir} -lmapiadmin
+Libs.private: @LIBS@
+Cflags: -I${includedir}
+Requires: libmapi dcerpc_samr
+
