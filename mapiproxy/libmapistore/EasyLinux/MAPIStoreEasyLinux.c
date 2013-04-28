@@ -43,8 +43,6 @@
 #include <sys/types.h>
 #include <fcntl.h>
 
-int mapistore_init_backend(void);
-
 #define YES		1
 #define NO		0
 #define BOOL	unsigned int
@@ -58,7 +56,6 @@ int mapistore_init_backend(void);
  */
 static enum mapistore_error BackendInit (void)
 {
-//DEBUG(0, ("\nBackendInit\n"));
 // On doit connaitre le serveur Ldap, les éléments de connexion, initialiser la connexion
 
 return MAPISTORE_SUCCESS;
@@ -80,9 +77,11 @@ In this example context is the structure allocated with the memory context passe
 static int BackendDestructor(void *data)
 {
 // perform operations to clean-up everything properly 
+DEBUG(3, ("SNOEL : Appel du destructeur\n"));
 
 return 0;
 }
+
 
 /**
  * \details Create a connection context to the backend
@@ -98,21 +97,32 @@ return 0;
  * \param *indexingTdb          struct tdb_wrap * 		Pointer to a wrapped TDB database (sort of hash table) which associates for all folder/messages 
  *                              							an Exchange specific folder and message identifier to a mapistore URI.
  * \param uri                   const char 		Pointer to the URI for this context
- * \param **context_object      void 					Pointer to a context object to return and which the backend uses to associate backend's specific information on the context.
+ * \param **backend_object      void 					Pointer to a backend object to return and which the backend uses to associate backend's specific information on the context.
  */
 
 static enum mapistore_error BackendCreateContext(TALLOC_CTX *mem_ctx,
                             struct mapistore_connection_info *conn_info,
                             struct tdb_wrap *indexingTdb,
-                            const char *uri, void **context_object)
+                            const char *uri, void **backend_object)
 {
 int rc=MAPISTORE_SUCCESS;  
+struct EasyLinuxBackendContext *elBackendContext;
 
+DEBUG(3, ("SNOEL : CreateContext Uri(%s)\n",uri ));
+
+elBackendContext = (struct EasyLinuxBackendContext *)talloc_zero_size(mem_ctx, sizeof(struct EasyLinuxBackendContext) );
+//*backend_object = (void *)&elBackendContext;
+backend_object = (void *)&elBackendContext;
+// Retreive user informations from Ldap
+SetUserInformation(elBackendContext, mem_ctx, conn_info->username, conn_info->sam_ctx);
+// Retrieve MAPI letteral Name
+InitialiseRootFolder(elBackendContext, mem_ctx, conn_info->username, conn_info->oc_ctx, uri);
+elBackendContext->Folder.Valid=1;
+elBackendContext->Test=1;
 // MAPIStore backend don't include a destructor function capability, we want one 
 talloc_set_destructor((void *)mem_ctx, (int (*)(void *))BackendDestructor);
+DEBUG(3, ("SNOEL : Set destructor function\n"));
 
-// On doit connaitre le serveur Ldap, les éléments de connexion, initialiser la connexion
-DEBUG(0, ("BackendCreateContext : On cree ou accède à '%s'\n", uri ));
 return rc;
 }
 
@@ -121,13 +131,15 @@ return rc;
  */
 static enum mapistore_error BackendCreateRootFolder (const char *username,
                                  enum mapistore_context_role role,
-                                 uint64_t fid, const char *name,
+                                 uint64_t fid, 
+                                 const char *name,
                                  // struct tdb_wrap *indexingTdb,
-                                 TALLOC_CTX *mem_ctx, char **mapistore_urip)
+                                 TALLOC_CTX *mem_ctx, 
+                                 char **mapistore_urip)
 {
-int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
+int rc=MAPISTORE_SUCCESS; // MAPISTORE_SUCCESS   MAPISTORE_ERR_NOT_IMPLEMENTED
 
-DEBUG(0, ("BackendCreateRootFolder\n"));
+DEBUG(0, ("BackendCreateRootFolder Role(%i) FID(%lX) Name(%s)\n",role, fid, name));
 return rc;
 }
 
@@ -149,10 +161,10 @@ return rc;
 */
 static enum mapistore_error BackendListContexts(const char *username, struct tdb_wrap *indexingTdb,
                            TALLOC_CTX *mem_ctx,
-                           struct mapistore_contexts_list **contexts_listp)
+                           struct mapistore_contexts_list **contexts_listp)  // SNOEL contexts_listp  (adresse du pointeur)
 {
-int rc=MAPISTORE_SUCCESS;
-int i=0, iDir;
+int rc=MAPISTORE_SUCCESS;  // MAPISTORE_ERR_NO_DIRECTORY  MAPISTORE_SUCCESS   MAPISTORE_ERROR
+int i=0;
 struct mapistore_contexts_list *Context, *ContextOld, *ContextNew;
 char *ContextRole[]={"INBOX","INBOX/Draft", "INBOX/Sent", "INBOX/Outbox","INBOX/Trash","CALENDAR","CONTACTS","TASKS",
                      "NOTES","JOURNAL","FALLBACK","MAX"};
@@ -160,54 +172,39 @@ enum mapistore_context_role  Roles[]= {MAPISTORE_MAIL_ROLE, 	MAPISTORE_DRAFTS_RO
                      MAPISTORE_OUTBOX_ROLE, MAPISTORE_DELETEDITEMS_ROLE, MAPISTORE_CALENDAR_ROLE,
                      MAPISTORE_CONTACTS_ROLE, MAPISTORE_TASKS_ROLE, MAPISTORE_NOTES_ROLE, MAPISTORE_JOURNAL_ROLE,
                      MAPISTORE_FALLBACK_ROLE, MAPISTORE_MAX_ROLES };
-char FileName[128];
 
-// First time ?
-sprintf(FileName, "/home/%s/OpenChange",username);
-// Try to open local dir
-iDir = open(FileName, O_RDONLY);
-if( iDir == -1 &&  errno != EEXIST)
-  {  // Can no open -> Create Store
-  mkdir(FileName, 0775);
-  for(i=0 ; i<12 ; i++)
-    {
-  	sprintf(FileName, "/home/%s/OpenChange/%s\n",username,ContextRole[i]);
-  	DEBUG(0,("Creating %s",FileName));
-  	mkdir(FileName, 0775);
-  	}
-  }
-else
-  {
-  close(iDir);
-  DEBUG(3,("Le contexte existe\n"));
-  }
-
-DEBUG(0, ("Enregistrement des rôles "));
+DEBUG(3, ("Registering roles "));
+ContextOld = NULL;
+ContextNew = NULL;
 for( i=0 ; i < 12 ; i++ )
   {
-  ContextOld = NULL; 
-	Context = (struct mapistore_contexts_list *)talloc_zero_size(mem_ctx, sizeof(struct mapistore_contexts_list) );
 	if( i == 0 )
+	  {
+  	Context = (struct mapistore_contexts_list *)talloc_zero_size(mem_ctx, sizeof(struct mapistore_contexts_list) );
 	  *contexts_listp = Context;
+	  }
 
-	Context->url 				 		= talloc_strdup(mem_ctx, "EasyLinux://");
+	Context->url 				 		= talloc_asprintf(mem_ctx,"EasyLinux://%s",ContextRole[i]);
 	Context->name				 		= talloc_strdup(mem_ctx, ContextRole[i]);
 	Context->main_folder 		= true;
 	Context->role 					= Roles[i];
 	Context->tag						= talloc_strdup(mem_ctx, ContextRole[i]);
-	Context->prev						= NULL;
-	if( i < 12 )
+	Context->prev	          = ContextOld;
+	
+	if( i < 11 )
 	  {
 		ContextNew = (struct mapistore_contexts_list *)talloc_zero_size(mem_ctx, sizeof(struct mapistore_contexts_list) );
-		Context->next						= ContextNew;
+		Context->next					= ContextNew;
+		ContextOld						= Context;
+		Context								= ContextNew;
 		}
 	else
-	  Context->next						= NULL;
-	Context = ContextNew;
-	DEBUG(0, ("."));
+		Context->next					= NULL;
+	
+	DEBUG(3, ("."));
 	}
 
-DEBUG(0, ("\nBackendListContexts %s done! \n",username));
+DEBUG(3, ("BackendListContexts %s done! \n",username));
 return rc;
 }
 
@@ -252,11 +249,17 @@ return rc;
  * \param fmid
  * \param **path
  */
-static enum mapistore_error ContextGetPath(void *backend_object, TALLOC_CTX *mem_ctx,
-                      uint64_t fmid, char **path)
+static enum mapistore_error ContextGetPath(void *backend_object, TALLOC_CTX *mem_ctx, uint64_t fmid, char **path)
 {
-int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("ContextGetPath\n"));
+char *Path;
+int rc=MAPISTORE_SUCCESS;
+struct EasyLinuxBackendContext *elBackendContext;
+
+elBackendContext = (struct EasyLinuxBackendContext *)backend_object;
+//DEBUG(0, ("Dans ContextGetPath  (%i)\n",elBackendContext->Folder.Valid));
+//Path = talloc_asprintf(mem_ctx, "%s",elBackendContext->Folder.displayName);
+//path = &Path;
+DEBUG(0, ("ContextGetPath (%lX) \n",fmid));
 return rc;
 }
 
@@ -277,14 +280,15 @@ return rc;
  * functions returns a folder representation of the context object created. It lets backends directly call folder operations on 
  * contexts rather than having to open (again) the folder to call its operations.
  */
-static enum mapistore_error ContextGetRootFolder(void *backend_object, TALLOC_CTX *mem_ctx,
-                             uint64_t fid, void **folder_object)  
+static enum mapistore_error ContextGetRootFolder(void *backend_object, TALLOC_CTX *mem_ctx, uint64_t fid, void **folder_object)  
 {
-int rc=MAPISTORE_SUCCESS;
-char *Folder="INBOX\0\0";
+int rc=MAPISTORE_SUCCESS;  // MAPISTORE_ERR_NO_DIRECTORY    MAPISTORE_SUCCESS
+struct EasyLinuxBackendContext *elBackendContext;
 
-// *folder_object = (char *)Folder;
-DEBUG(0, ("\nContextGetRootFolder %lX \n",fid));
+elBackendContext = (struct EasyLinuxBackendContext *)backend_object;
+//folder_object = (void *)&elBackendContext->Folder;
+
+DEBUG(0, ("ContextGetRootFolder (%lX) Valid(%i)\n",fid, elBackendContext->Test));
 return rc;
 }
 
@@ -820,7 +824,7 @@ return rc;
 static enum mapistore_error PropertiesSetProperties (void *object, struct SRow *aRow)
 {
 DEBUG(0, ("PropertiesSetProperties\n"));
-int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
+int rc=MAPISTORE_SUCCESS;
 return rc;
 }
 
@@ -868,7 +872,7 @@ else
   // Backend 
   backend.backend.name 												= "EasyLinux";
   backend.backend.description 								= "MAPIStore EasyLinux backend";
-  backend.backend.namespace 									= "easy://";
+  backend.backend.namespace 									= "EasyLinux://";
   backend.backend.init 												= BackendInit;
   backend.backend.create_context 							= BackendCreateContext;
   backend.backend.create_root_folder 					= BackendCreateRootFolder;

@@ -193,7 +193,7 @@ FolderId: 0x67ca828f02000001      Display Name: "                        ";  Con
 	TALLOC_CTX				*mem_ctx;
 	enum MAPISTATUS				ret;
 	enum mapistore_error			retval;
-	struct mapistore_contexts_list		*contexts_list;
+	struct mapistore_contexts_list		*contexts_list;  
 	struct StringArrayW_r			*existing_uris;
 	struct mapistore_contexts_list		*main_entries[MAPISTORE_MAX_ROLES], *secondary_entries[MAPISTORE_MAX_ROLES], *next_entry, *current_entry;
 	static const char			*folder_names[] = {NULL, "Root", "Deferred Action", "Spooler Queue", "Common Views", "Schedule", "Finder", "Views", "Shortcuts", "Reminders", "To-Do", "Tracked Mail Processing", "Top of Information Store", "Inbox", "Outbox", "Sent Items", "Deleted Items"};
@@ -223,8 +223,7 @@ FolderId: 0x67ca828f02000001      Display Name: "                        ";  Con
 	ldb_transaction_start(emsmdbp_ctx->oc_ctx);
 
 	/* Retrieve list of folders from backends */
-	retval = mapistore_list_contexts_for_user(emsmdbp_ctx->mstore_ctx, username, mem_ctx, &contexts_list);
-DEBUG(0,("SNOEL Dans emsmdb\n\n\n"));	
+	retval = mapistore_list_contexts_for_user(emsmdbp_ctx->mstore_ctx, username, mem_ctx, &contexts_list);  
 	if (retval != MAPISTORE_SUCCESS) {
 		talloc_free(mem_ctx);
 		return MAPI_E_DISK_ERROR;
@@ -234,7 +233,7 @@ DEBUG(0,("SNOEL Dans emsmdb\n\n\n"));
 	current_entry = contexts_list;
 	while (current_entry) {
 		mapistore_url = current_entry->url;
-DEBUG(0,("SNOEL Scan urls : %s",mapistore_url));
+
 		if (mapistore_url) {
 			if (mapistore_url[strlen(mapistore_url)-1] != '/') {
 				current_entry->url = talloc_asprintf(mem_ctx, "%s/", mapistore_url);

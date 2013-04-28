@@ -316,7 +316,7 @@ enum mapistore_error mapistore_backend_list_contexts(const char *username, struc
 	}
 	*contexts_listP = contexts_list;
 	(void) talloc_reference(mem_ctx, contexts_list);
-DEBUG(0,("OK ici %s\n\n",contexts_list->url));
+
 	return MAPISTORE_SUCCESS;
 }
 
@@ -342,18 +342,20 @@ enum mapistore_error mapistore_backend_create_context(TALLOC_CTX *mem_ctx, struc
 
 	context = talloc_zero(NULL, struct backend_context);
 
-	for (i = 0; i < num_backends; i++) {
-		if (backends[i].backend->backend.namespace && 
-		    !strcmp(namespace, backends[i].backend->backend.namespace)) {
+	for (i = 0; i < num_backends; i++) 
+	  {
+		if (backends[i].backend->backend.namespace && !strcmp(namespace, backends[i].backend->backend.namespace)) 
+		  {
 			found = true;
 			retval = backends[i].backend->backend.create_context(context, conn_info, tdbwrap, uri, &backend_object);
-			if (retval != MAPISTORE_SUCCESS) {
+			if (retval != MAPISTORE_SUCCESS) 
+			  {
 				goto end;
-			}
+			  }
 
 			break;
-		}
-	}
+		  }
+	  }
 
 	if (found == false) {
 		DEBUG(0, ("MAPISTORE: no backend with namespace '%s' is available\n", namespace));

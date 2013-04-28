@@ -447,11 +447,10 @@ _PUBLIC_ const char *mapistore_errstr(enum mapistore_error mapistore_err)
 	return "Unknown error";
 }
 
-_PUBLIC_ enum mapistore_error mapistore_list_contexts_for_user(struct mapistore_context *mstore_ctx, const char *owner, TALLOC_CTX *mem_ctx, struct mapistore_contexts_list **contexts_listp)
+_PUBLIC_ enum mapistore_error mapistore_list_contexts_for_user(struct mapistore_context *mstore_ctx, const char *owner, TALLOC_CTX *mem_ctx, struct mapistore_contexts_list **contexts_listp)  // SNOEL Adresse du pointeur
 {
 	char					*mapistore_dir;
 	struct indexing_context_list		*ictx;
-enum mapistore_error Test;
 
 	/* ensure the user mapistore directory exists before any mapistore operation occurs */
 	mapistore_dir = talloc_asprintf(mem_ctx, "%s/%s", mapistore_get_mapping_path(), owner);
@@ -460,10 +459,7 @@ enum mapistore_error Test;
 	mapistore_indexing_add(mstore_ctx, owner, &ictx);
 	/* mapistore_indexing_add_ref_count(ictx); */
  
-DEBUG(0,("interface appelle List\n") );	
-Test = mapistore_backend_list_contexts(owner, ictx->index_ctx, mem_ctx, contexts_listp);
-DEBUG(0,("interface retour List: %i\n",(int)Test) );	
-	return MAPISTORE_ERROR;
+  return mapistore_backend_list_contexts(owner, ictx->index_ctx, mem_ctx, contexts_listp);  
 
 }
 
