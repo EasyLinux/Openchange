@@ -103,7 +103,7 @@ re:: clean install
 # Suffixes compilation rules
 #################################################################
 
-.SUFFIXES: .c .o .h .po .idl .cpp
+.SUFFIXES: .c .o .h .po .idl .cpp .xpo
 
 .idl.h:
 	@echo "Generating $@"
@@ -116,6 +116,10 @@ re:: clean install
 .c.po:
 	@echo "Compiling $< with -fPIC"
 	@$(CC) $(CFLAGS) -fPIC -c $< -o $@
+
+.c.xpo:
+	@echo "Compiling $< with -fPIC with Xml2"
+	@$(CC) $(CFLAGS) -I/usr/include/libxml2 -fPIC -c $< -o $@
 
 .cpp.o:
 	@echo "Compiling $< with -fPIC"
@@ -928,15 +932,16 @@ mapiproxy/libmapistore.$(SHLIBEXT).$(LIBMAPISTORE_SO_VERSION): libmapistore.$(SH
 # mapistore backends
 #####################
 
-LIBEASY_SO_VERSION = 0.1
+LIBEASY_SO_VERSION = 0.2
 
 libeasy:  mapiproxy/libmapistore/EasyLinux/MAPIStoreEasyLinux.$(SHLIBEXT).$(LIBEASY_SO_VERSION) 
 
 mapiproxy/libmapistore/EasyLinux/MAPIStoreEasyLinux.$(SHLIBEXT).$(LIBEASY_SO_VERSION): 	 mapiproxy/libmapistore/EasyLinux/MAPIStoreEasyLinux.po \
     mapiproxy/libmapistore/EasyLinux/EasyLinux_Ldap_Funcs.po \
+    mapiproxy/libmapistore/EasyLinux/EasyLinux_Maildir.xpo \
 		mapiproxy/libmapistore.$(SHLIBEXT).$(PACKAGE_VERSION)
 		@echo "Link libmapistore"
-		@$(CC) -o $@ $^ $(DSOOPT) $(LDFLAGS) -lldap -llber -Wl,-soname,MAPIStoreEasyLinux.$(SHLIBEXT).$(LIBEASY_SO_VERSION)
+		@$(CC) -o $@ $^ $(DSOOPT) $(LDFLAGS) -lldap -llber -lxml2 -Wl,-soname,MAPIStoreEasyLinux.$(SHLIBEXT).$(LIBEASY_SO_VERSION)
 	
 libeasy-install:  mapiproxy/libmapistore/EasyLinux/MAPIStoreEasyLinux.$(SHLIBEXT).$(LIBEASY_SO_VERSION) 
 		$(INSTALL) mapiproxy/libmapistore/EasyLinux/MAPIStoreEasyLinux.$(SHLIBEXT).$(LIBEASY_SO_VERSION) $(libdir)/mapistore_backends 

@@ -27,6 +27,24 @@
  * \date  2013-04-10
  *
  * Initialisation routines of OpenChange EasyLinux storage backend.
+ 
+ BackendListContexts
+ 
+ CreateContext
+ InitialiseRootFolder
+ 
+ 
+ 
+ ContextGetPath
+ CreateContext
+ ContextGetRootFolder
+ SetProperties SetPidTagDisplay Value :'Freebusy Data'
+ FolderOpenTable  FALLBACK/0x9a03000000000001/ Type: MESSAGE_TABLE
+ TableGetRowCount
+ FolderCreateMessage
+ SetProperties   PidTagMessageClass(0x1A001F) Value :'IPM.Microsoft.ScheduleData.FreeBusy'
+ MessageSave
+ 
  *
  */
 
@@ -57,7 +75,7 @@
 static enum mapistore_error BackendInit (void)
 {
 // On doit connaitre le serveur Ldap, les éléments de connexion, initialiser la connexion
-
+DEBUG(0,("MAPIEasyLinux : BackendInit\n"));
 return MAPISTORE_SUCCESS;
 }
 
@@ -77,7 +95,7 @@ In this example context is the structure allocated with the memory context passe
 static int BackendDestructor(void *data)
 {
 // perform operations to clean-up everything properly 
-DEBUG(3, ("SNOEL : Appel du destructeur\n"));
+DEBUG(0, ("MAPIEasyLinux : Appel du destructeur\n"));
 
 return 0;
 }
@@ -105,25 +123,39 @@ static enum mapistore_error BackendCreateContext(TALLOC_CTX *mem_ctx,
                             struct tdb_wrap *indexingTdb,
                             const char *uri, void **backend_object)
 {
-int rc=MAPISTORE_SUCCESS;  
 struct EasyLinuxBackendContext *elBackendContext;
 
-DEBUG(3, ("SNOEL : CreateContext Uri(%s)\n",uri ));
+DEBUG(0, ("MAPIEasyLinux : CreateContext Uri(%s)\n",uri ));
 
 elBackendContext = (struct EasyLinuxBackendContext *)talloc_zero_size(mem_ctx, sizeof(struct EasyLinuxBackendContext) );
-//*backend_object = (void *)&elBackendContext;
-backend_object = (void *)&elBackendContext;
+elBackendContext->stType = EASYLINUX_BACKEND;
+
+*backend_object = (void *)elBackendContext;
+if( !conn_info )
+  {
+  DEBUG(0,("MAPIEasyLinux : CreateContext No Conn Information !\n"));
+  return MAPISTORE_ERR_NOT_FOUND;
+  }
+  
 // Retreive user informations from Ldap
-SetUserInformation(elBackendContext, mem_ctx, conn_info->username, conn_info->sam_ctx);
+if( SetUserInformation(elBackendContext, mem_ctx, conn_info->username, conn_info->sam_ctx) != MAPISTORE_SUCCESS)
+  return MAPISTORE_ERR_INVALID_PARAMETER;
+
 // Retrieve MAPI letteral Name
-InitialiseRootFolder(elBackendContext, mem_ctx, conn_info->username, conn_info->oc_ctx, uri);
-elBackendContext->Folder.Valid=1;
-elBackendContext->Test=1;
+if( !conn_info->oc_ctx )
+  DEBUG(0,("ERROR: MAPIEasyLinux - CreateContext No indexing !\n"));
+if( InitialiseRootFolder(elBackendContext, mem_ctx, conn_info->username, conn_info->oc_ctx, uri) != MAPISTORE_SUCCESS)
+  return MAPISTORE_ERR_INVALID_PARAMETER;
+elBackendContext->RootFolder.stType = EASYLINUX_FOLDER;  
+elBackendContext->RootFolder.Valid=1;
+elBackendContext->RootFolder.Uri=talloc_strdup(mem_ctx, uri);
+//elBackendContext->Folder.displayName=talloc_strdup(mem_ctx, uri);
+elBackendContext->mem_ctx = mem_ctx;
+elBackendContext->RootFolder.elContext = elBackendContext;
+
 // MAPIStore backend don't include a destructor function capability, we want one 
 talloc_set_destructor((void *)mem_ctx, (int (*)(void *))BackendDestructor);
-DEBUG(3, ("SNOEL : Set destructor function\n"));
-
-return rc;
+return MAPISTORE_SUCCESS;
 }
 
 /**
@@ -137,10 +169,10 @@ static enum mapistore_error BackendCreateRootFolder (const char *username,
                                  TALLOC_CTX *mem_ctx, 
                                  char **mapistore_urip)
 {
-int rc=MAPISTORE_SUCCESS; // MAPISTORE_SUCCESS   MAPISTORE_ERR_NOT_IMPLEMENTED
+// MAPISTORE_SUCCESS   MAPISTORE_ERR_NOT_IMPLEMENTED
 
-DEBUG(0, ("BackendCreateRootFolder Role(%i) FID(%lX) Name(%s)\n",role, fid, name));
-return rc;
+DEBUG(0, ("MAPIEasyLinux : BackendCreateRootFolder Role(%i) FID(%lX) Name(%s)\n",role, fid, name));
+return MAPISTORE_ERR_NOT_IMPLEMENTED;
 }
 
 /**
@@ -173,7 +205,6 @@ enum mapistore_context_role  Roles[]= {MAPISTORE_MAIL_ROLE, 	MAPISTORE_DRAFTS_RO
                      MAPISTORE_CONTACTS_ROLE, MAPISTORE_TASKS_ROLE, MAPISTORE_NOTES_ROLE, MAPISTORE_JOURNAL_ROLE,
                      MAPISTORE_FALLBACK_ROLE, MAPISTORE_MAX_ROLES };
 
-DEBUG(3, ("Registering roles "));
 ContextOld = NULL;
 ContextNew = NULL;
 for( i=0 ; i < 12 ; i++ )
@@ -200,17 +231,16 @@ for( i=0 ; i < 12 ; i++ )
 		}
 	else
 		Context->next					= NULL;
-	
-	DEBUG(3, ("."));
 	}
 
-DEBUG(3, ("BackendListContexts %s done! \n",username));
+DEBUG(3, ("MAPIEasyLinux : BackendListContexts %s done! \n",username));
 return rc;
 }
 
 
 /**
- * \details return the mapistore path associated to a given message or folder ID
+ * return the mapistore path associated to a given message or folder ID
+ *
  * In MAPIStore, backends can't register FMID to mapistore URI themselves. This is the role of mapistore middleware.
  *
  * To understand this choice, an overview of message creation provides a good example. When a MAPI client creates a 
@@ -252,15 +282,14 @@ return rc;
 static enum mapistore_error ContextGetPath(void *backend_object, TALLOC_CTX *mem_ctx, uint64_t fmid, char **path)
 {
 char *Path;
-int rc=MAPISTORE_SUCCESS;
 struct EasyLinuxBackendContext *elBackendContext;
 
 elBackendContext = (struct EasyLinuxBackendContext *)backend_object;
-//DEBUG(0, ("Dans ContextGetPath  (%i)\n",elBackendContext->Folder.Valid));
-//Path = talloc_asprintf(mem_ctx, "%s",elBackendContext->Folder.displayName);
-//path = &Path;
-DEBUG(0, ("ContextGetPath (%lX) \n",fmid));
-return rc;
+Path = talloc_asprintf(mem_ctx, "%s",elBackendContext->RootFolder.displayName);
+
+path = &Path;
+DEBUG(0, ("MAPIEasyLinux : ContextGetPath: /'%s' (%lX) \n",Path, fmid));
+return MAPISTORE_SUCCESS;
 }
 
 /**
@@ -280,15 +309,18 @@ return rc;
  * functions returns a folder representation of the context object created. It lets backends directly call folder operations on 
  * contexts rather than having to open (again) the folder to call its operations.
  */
-static enum mapistore_error ContextGetRootFolder(void *backend_object, TALLOC_CTX *mem_ctx, uint64_t fid, void **folder_object)  
+static enum mapistore_error ContextGetRootFolder(void *backend_object, TALLOC_CTX *mem_ctx, uint64_t fid, void **object)  
 {
 int rc=MAPISTORE_SUCCESS;  // MAPISTORE_ERR_NO_DIRECTORY    MAPISTORE_SUCCESS
 struct EasyLinuxBackendContext *elBackendContext;
 
 elBackendContext = (struct EasyLinuxBackendContext *)backend_object;
-//folder_object = (void *)&elBackendContext->Folder;
 
-DEBUG(0, ("ContextGetRootFolder (%lX) Valid(%i)\n",fid, elBackendContext->Test));
+DEBUG(0,("MAPIEasyLinux : ContextGetRootFolder (%lX) - (%s)\n",elBackendContext->RootFolder.FID, elBackendContext->RootFolder.displayName));
+//*object = backend_object;
+*object = &elBackendContext->RootFolder;
+
+// DEBUG(0, ("MAPIEasyLinux : ContextGetRootFolder (%lX)\n",fid));
 return rc;
 }
 
@@ -314,8 +346,8 @@ return rc;
  */
 static enum mapistore_error FolderOpen(void *parent_folder, TALLOC_CTX *mem_ctx, uint64_t fid, void **childfolder_object)
 {
-int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("FolderOpen\n"));
+int rc=MAPISTORE_SUCCESS;
+DEBUG(0, ("MAPIEasyLinux : FolderOpen\n"));
 return rc;
 }
 
@@ -343,7 +375,7 @@ return rc;
 static enum mapistore_error FolderCreate(void *parent_folder, TALLOC_CTX *mem_ctx, uint64_t fid, struct SRow *aRow, void **childfolder)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("FolderCreate\n"));
+DEBUG(0, ("MAPIEasyLinux : FolderCreate\n"));
 return rc;
 }
 
@@ -359,7 +391,7 @@ return rc;
 static enum mapistore_error FolderDelete(void *folder_object)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("FolderDelete\n"));
+DEBUG(0, ("MAPIEasyLinux : FolderDelete\n"));
 return rc;
 }
 
@@ -369,16 +401,22 @@ return rc;
  * \param *folder_object	  void				the folder on which the count has to be retrieved
  * \param table_type  			uint8_t			the type of item to retrieve. Possible values are listed below
  * \param *rowCount  				uint32_t 		the number of elements retrieved
-
-Possible values for table_type are:
-- MAPISTORE_MESSAGE_TABLE: the number of messages within the folder
-- MAPISTORE_FAI_TABLE: the number of FAI messages within the folder
-- MAPISTORE_FOLDER_TABLE: the number of folders within the folder
-*/
-static enum mapistore_error FolderGetChildCount(void *folder_object, enum mapistore_table_type table_type, uint32_t *rowCount)
+ *
+ * Possible values for table_type are:
+ *   - 2 MAPISTORE_MESSAGE_TABLE: the number of messages within the folder
+ *   - 3 MAPISTORE_FAI_TABLE: the number of FAI messages within the folder
+ *   - 1 MAPISTORE_FOLDER_TABLE: the number of folders within the folder
+ */
+static enum mapistore_error FolderGetChildCount(void *folder_object, uint32_t table_type, uint32_t *rowCount)
 {
-int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("FolderGetChildCount\n"));
+int rc=MAPISTORE_SUCCESS;
+struct EasyLinuxFolder *elFolder;
+
+elFolder = folder_object;
+
+*rowCount = GetMaildirChildCount(elFolder, table_type);
+
+DEBUG(0, ("MAPIEasyLinux : FolderGetChildCount for '%s' (%i)\n", elFolder->displayName, *rowCount));
 return rc;
 }
 
@@ -397,7 +435,7 @@ static enum mapistore_error FolderOpenMessage(void *folder_object,
                          void **message_object)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("FolderOpenMessage\n"));
+DEBUG(0, ("MAPIEasyLinux : FolderOpenMessage\n"));
 return rc;
 }
 
@@ -446,14 +484,30 @@ return rc;
  * The associated parameter lets your backend know if it already has a file or structure associated to this message 
  * in which it stores exchange properties it can't map.
  */
-static enum mapistore_error FolderCreateMessage(void *folder_object,
+static enum mapistore_error FolderCreateMessage(void *parent_folder,
                            TALLOC_CTX *mem_ctx,
                            uint64_t mid,
                            uint8_t associated,
                            void **message_object)
 {
-int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("FolderCreateMessage\n"));
+int rc=MAPISTORE_SUCCESS;
+//struct EasyLinuxBackendContext *elBackendContext;
+struct EasyLinuxFolder  *elFolder;
+struct EasyLinuxMessage *elMessage;
+
+elFolder  = (struct EasyLinuxFolder  *)parent_folder;
+elMessage = (struct EasyLinuxMessage *)talloc_zero_size(mem_ctx, sizeof(struct EasyLinuxMessage) );
+
+elMessage->stType = EASYLINUX_MSG;
+elMessage->MID = mid;
+elMessage->associated = associated;
+//elMessage->displayName = ;
+elMessage->parent_folder = elFolder;
+elMessage->elContext = elFolder->elContext;
+
+*message_object = &elMessage;
+
+DEBUG(0, ("MAPIEasyLinux : FolderCreateMessage\n"));
 return rc;
 }
 
@@ -474,7 +528,7 @@ return rc;
 static enum mapistore_error FolderDeleteMessage(void *folder_object, uint64_t mid, uint8_t flags)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("FolderDeleteMessage\n"));
+DEBUG(0, ("MAPIEasyLinux : FolderDeleteMessage\n"));
 return rc;
 }
 
@@ -490,7 +544,7 @@ static enum mapistore_error FolderMoveCopyMessages(void *folder_object,
                                uint8_t want_copy)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("FolderMoveCopyMessages\n"));
+DEBUG(0, ("MAPIEasyLinux : FolderMoveCopyMessages\n"));
 return rc;
 }
 
@@ -501,7 +555,7 @@ static enum mapistore_error FolderMove(void *folder_object, void *target_folder_
                         TALLOC_CTX *mem_ctx, const char *new_folder_name)
 {
 int rc=MAPISTORE_SUCCESS;
-DEBUG(0, ("FolderMoveFolder\n"));
+DEBUG(0, ("MAPIEasyLinux : FolderMoveFolder\n"));
 return rc;
 }
 
@@ -512,7 +566,7 @@ static enum mapistore_error FolderCopy(void *folder_object, void *target_folder_
                         bool recursive, const char *new_folder_name)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("FolderCopyFolder\n"));
+DEBUG(0, ("MAPIEasyLinux : FolderCopyFolder\n"));
 return rc;
 }
 
@@ -524,7 +578,7 @@ static enum mapistore_error FolderGetDeletedFmids(void *folder_object, TALLOC_CT
                               struct UI8Array_r **fmidsp, uint64_t *cnp)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("FolderGetDeletedFmids\n"));
+DEBUG(0, ("MAPIEasyLinux : FolderGetDeletedFmids\n"));
 return rc;
 }
 
@@ -532,7 +586,7 @@ return rc;
 This function creates a table object to be used along with backend's table operations. The function takes in parameter:
 - void *folder_object: the folder on which the table has to be created
 - TALLOC_CTX *: the memory context to use to create the table
-- uint8_t table_type: the table type to create. See below for possible table_type values
+- uint8_t table_type: the table type to create. See below for possible table_type valuesFolder.displayName
 - uint32_t handle_id: Exchange temporary id for the object. Used for the moment for notifications on table
 - void **table_object: the table object to return
 - uint32_t *row_count: the number of row of the table to be returned. It is used by OpenChange server and returned clients, so they know how many rows are available and how much they can query.
@@ -549,12 +603,49 @@ The handling of handle_id can be avoided for now as it is likely to change with 
 
 OpenChange is waiting for a table_object (void **) which it doesn't care about, but will pass it to your backend when a new table operation occurs. It is also waiting for the number of rows in the table (uint32_t *row_count)
 */
-static enum mapistore_error FolderOpenTable(void *folder_object, TALLOC_CTX *mem_ctx,
+static enum mapistore_error FolderCreateTable(void *folder_object, TALLOC_CTX *mem_ctx,
                        enum mapistore_table_type table_type, uint32_t handle_id,
                        void **table_object, uint32_t *row_count)
 {
-int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("FolderOpenTable\n"));
+int rc=MAPISTORE_SUCCESS;
+uint8_t  tType;
+char     *sType;
+struct EasyLinuxTable  *elTable;
+struct EasyLinuxFolder *elFolder;
+
+elFolder = (struct EasyLinuxFolder *)folder_object;
+elTable = talloc_zero_size(mem_ctx, sizeof(struct EasyLinuxTable));
+*table_object = &elTable;
+
+
+tType = (uint8_t)table_type;
+switch( tType )
+  {
+  case 2:   // MAPISTORE_MESSAGE_TABLE
+    sType = talloc_strdup(mem_ctx, "MESSAGE_TABLE");
+    break;
+  case 3:   // MAPISTORE_FAI_TABLE
+    sType = talloc_strdup(mem_ctx, "FAI_TABLE");
+    break;
+  case 1:   // MAPISTORE_FOLDER_TABLE
+    sType = talloc_strdup(mem_ctx, "FOLDER_TABLE");
+    break;
+  }  
+
+elTable->stType = EASYLINUX_TABLE;
+elTable->rowCount = 0;
+elTable->IdTable = handle_id;
+elTable->tType  = tType;
+elTable->parent_folder = folder_object;
+elTable->elContext = elFolder->elContext;
+*row_count = elTable->rowCount;
+
+//DEBUG(0, ("MAPIEasyLinux :\n"));
+DEBUG(0, ("MAPIEasyLinux : FolderCreateTable - Creer table\n"));
+DEBUG(0, ("MAPIEasyLinux :       Parent :%s\n",elFolder->displayName));
+DEBUG(0, ("MAPIEasyLinux :       Table:%s  Type: %s  Id Table: %i\n",elFolder->displayName, sType, handle_id));
+
+talloc_unlink(mem_ctx, sType);
 return rc;
 }
 
@@ -566,7 +657,7 @@ static enum mapistore_error FolderModifyPermissions(void *folder_object, uint8_t
                                struct PermissionData *permissions)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("FolderModifyPermissions\n"));
+DEBUG(0, ("MAPIEasyLinux : FolderModifyPermissions\n"));
 return rc;
 }
 
@@ -576,7 +667,7 @@ return rc;
 static enum mapistore_error FolderPreloadMessageBodies(void *folder_object, enum mapistore_table_type table_type, const struct UI8Array_r *mids)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("FolderPreloadMessageBodies\n"));
+DEBUG(0, ("MAPIEasyLinux : FolderPreloadMessageBodies\n"));
 return rc;
 }
 
@@ -588,7 +679,7 @@ static enum mapistore_error MessageGetMessageData(void *message_object,
                               struct mapistore_message **msg_dataP)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("MessageGetMessageData\n"));
+DEBUG(0, ("MAPIEasyLinux : MessageGetMessageData\n"));
 return rc;
 }
 
@@ -597,7 +688,7 @@ return rc;
 static enum mapistore_error MessageCreateAttachment (void *message_object, TALLOC_CTX *mem_ctx, void **attachment_object, uint32_t *aidp)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("MessageCreateAttachment\n"));
+DEBUG(0, ("MAPIEasyLinux : MessageCreateAttachment\n"));
 return rc;
 }
 
@@ -620,7 +711,7 @@ static enum mapistore_error MessageOpenAttachment (void *message_object, TALLOC_
                               uint32_t aid, void **attachment_object)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("MessageOpenAttachment\n"));
+DEBUG(0, ("MAPIEasyLinux : MessageOpenAttachment\n"));
 return rc;
 }
 
@@ -636,7 +727,7 @@ This operation creates a table object to be used along with table operations. Th
 static enum mapistore_error MessageGetAttachmentTable (void *message_object, TALLOC_CTX *mem_ctx, void **table_object, uint32_t *row_count)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("MessageGetAttachmentTable\n"));
+DEBUG(0, ("MAPIEasyLinux : MessageGetAttachmentTable\n"));
 return rc;
 }
 
@@ -668,7 +759,7 @@ static enum mapistore_error MessageModifyRecipients (void *message_object,
                                 struct mapistore_message_recipient *recipients)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("MessageModifyRecipients\n"));
+DEBUG(0, ("MAPIEasyLinux : MessageModifyRecipients\n"));
 return rc;
 }
 
@@ -678,19 +769,23 @@ return rc;
 static enum mapistore_error MessageSetReadFlag (void *message_object, uint8_t flag)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("MessageSetReadFlag  Message Id     flag %x\n",flag));
+DEBUG(0, ("MAPIEasyLinux : MessageSetReadFlag  Message Id     flag %x\n",flag));
     //folders that are containers and which are of the mstoredb kind.
     //folders that are actually heavily used such as Inbox, Calendar, Outbox etc and which can be of any backend type.
 return rc;
 }
 
 /**
-This operation saves a message on remote/local storage system your backend handles. It takes all the temporary information associated to the message that has been modified/created and dump replicate the change/creation on the remote system. This function takes in parameter the message object. This is for example used when you create or edit a calendar, note, task or draft item.
+ *
+ * This operation saves a message on remote/local storage system your backend handles. It takes all the temporary information 
+ * associated to the message that has been modified/created and dump replicate the change/creation on the remote system. 
+ * This function takes in parameter the message object. This is for example used when you create or edit a calendar, 
+ * note, task or draft item.
 */
-static enum mapistore_error MessageSave (void *message_object, TALLOC_CTX *mem_ctx)
+static enum mapistore_error MessageSave (void *object, TALLOC_CTX *mem_ctx)
 {
-int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("MessageSave\n"));
+int rc=MAPISTORE_SUCCESS;
+DEBUG(0, ("MAPIEasyLinux : MessageSave TODO\n"));
 return rc;
 }
 
@@ -705,7 +800,7 @@ The function takes in parameters:
 static enum mapistore_error MessageSubmit (void *message_object, enum SubmitFlags flags)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("MessageSubmit\n"));
+DEBUG(0, ("MAPIEasyLinux : MessageSubmit\n"));
 return rc;
 }
 
@@ -727,7 +822,7 @@ static enum mapistore_error MessageAttachmentOpenEmbeddedMessage (void *attachme
                                                struct mapistore_message **msg)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("MessageAttachmentOpenEmbeddedMessage\n"));
+DEBUG(0, ("MAPIEasyLinux : MessageAttachmentOpenEmbeddedMessage\n"));
 return rc;
 }
 
@@ -740,91 +835,349 @@ static enum mapistore_error MessageAttachmentCreateEmbeddedMessage (void *attach
                                                  struct mapistore_message **msg)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("MessageAttachmentCreateEmbeddedMessage\n"));
+DEBUG(0, ("MAPIEasyLinux : MessageAttachmentCreateEmbeddedMessage\n"));
 return rc;
 }
 
 /**
+table.get_available_properties
+
+This function retrieves all the properties available for the table given the type of objects it handles. It doesn't relate to table.set_columns and the set of properties it set, but instead return a generic list of properties that can potentially be set on the given object type the table handles: message, folder, fai, permissions.
+The function takes in parameters:
+
+    void *table_object: the table object
+    TALLOC_CTX *: the memory context to allocate the struct SPropTagArray to return
+    struct SPropTagArray **properties: a pointer on pointer to the list of available properties to return
 
 */
 static enum mapistore_error TableGetAvailableProperties(void *table_object,
                                                TALLOC_CTX *mem_ctx, struct SPropTagArray **propertiesP)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("TableGetAvailableProperties\n"));
+DEBUG(0, ("MAPIEasyLinux : TableGetAvailableProperties\n"));
 return rc;
 }
 
+/*
+table.set_columns
+This function sets the columns we want to retrieve when querying for table objects row. The function takes in parameters:
+
+    void *table_object: the table object on which we want to set columns
+    uint16_t count: the number of enum MAPITAGS *properties to be set
+    enum MAPITAGS *properties: an array of MAPITAGS to be used to set columns
+*/
 static enum mapistore_error TableSetColumns (void *table_object, uint16_t count, enum MAPITAGS *properties)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("TableSetColumns\n"));
+DEBUG(0, ("MAPIEasyLinux : TableSetColumns\n"));
 return rc;
 }
 
-static enum mapistore_error TableSetRestrictions (void *table_object, struct mapi_SRestriction *restrictions, uint8_t *table_status)
+/*
+ *
+ * set_restrictions
+ * 
+ * This function sets one or more filters on the table. When the table is queried again through get_row or get_row_count, 
+ * filters will get applied and only filtered results returned.
+ * The function takes in parameters:
+ *
+ *  void *object: the table object restrictions apply on
+ *  struct mapi_SRestriction *restrictions: the restrictions to apply
+ *  uint8_t *table_status: the status of the table. In theory, we should be able to return from the set_restriction 
+ *                         even if the operation didn't yet complete (asynchronous mechanism). In practice, we just do the operation 
+ *                         synchronously and return TBLSTAT_COMPLETE if the restrictions applied properly.
+ *
+ * Regarding mapi_SRestriction, this structure defined a filter in Exchange world and should be detailed on the wiki. 
+ * This is however already covered by Exchange specifications in [MS-OXCDATA] section 2.12.
+ *
+ */
+static enum mapistore_error TableSetRestrictions (void *object, struct mapi_SRestriction *restrictions, uint8_t *table_status)
 {
-int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("TableSetRestrictions\n"));
+int rc=MAPISTORE_SUCCESS;
+char     *sRes, *sMsg;
+TALLOC_CTX *mem_ctx;
+struct EasyLinuxBackendContext *Object;
+
+Object = object;
+mem_ctx= Object->mem_ctx;
+
+switch(restrictions->rt)
+  {
+  case RES_AND:
+    sRes = talloc_strdup(mem_ctx, "RES_AND");
+    break;
+  case RES_OR:
+    sRes = talloc_strdup(mem_ctx, "RES_OR");
+    break;
+  case RES_CONTENT:
+    sRes = talloc_strdup(mem_ctx, "RES_CONTENT");
+    break;
+  case RES_PROPERTY:
+    sRes = talloc_strdup(mem_ctx, "RES_PROPERTY");
+    sMsg = talloc_asprintf(mem_ctx,"relop:%X - ulPropTag: %X",restrictions->res.resProperty.relop,restrictions->res.resProperty.ulPropTag);
+    //PidTagSubject=(int)(0x0037001F)
+    /*
+    struct mapi_SPropertyRestriction {
+	uint8_t relop;
+	enum MAPITAGS ulPropTag; // int
+	struct mapi_SPropValue lpProp;
+} [flag(LIBNDR_FLAG_NOALIGN)] 
+    */
+    break;
+  case RES_COMPAREPROPS:
+    sRes = talloc_strdup(mem_ctx, "RES_COMPAREPROPS");
+    break;
+  case RES_BITMASK:
+    sRes = talloc_strdup(mem_ctx, "RES_BITMASK");
+    break;
+  case RES_SIZE:
+    sRes = talloc_strdup(mem_ctx, "RES_SIZE");
+    break;
+  case RES_EXIST:
+    sRes = talloc_strdup(mem_ctx, "RES_EXIST");
+    break;
+  default:
+    sRes = talloc_strdup(mem_ctx, "Inconnu");
+    break;
+  }
+ 	
+*table_status = TBLSTAT_COMPLETE;
+DEBUG(0, ("MAPIEasyLinux : TableSetRestrictions (rt: %i) Type: %s Msg: %s\n",restrictions->rt, sRes, sMsg));
+
+talloc_unlink(mem_ctx, sRes);
+talloc_unlink(mem_ctx, sMsg);
 return rc;
 }
 
+/*
+table.set_sort_order
+This function set the sorting order depending on the specified struct SSortOrderSet *sort_order. This function takes in parameters:
+
+    void *table_object: the table object on which sorting applies
+    struct SSortOrderSet *sort_oder: the sort to apply to the table
+    uint8_t *table_status: the table status to return (TBLSTAT_COMPLETE, see above subsection).
+
+*/
 static enum mapistore_error TableSetSortOrder (void *table_object, struct SSortOrderSet *sort_order, uint8_t *table_status)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("TableSetSortOrder\n"));
+DEBUG(0, ("MAPIEasyLinux : TableSetSortOrder\n"));
 return rc;
 }
 
+/*
+table.get_row
+The function takes in parameters:
 
+    void *table_object: the table object to retrieve the row from
+    TALLOC_CTX : the memory context to user to allocate data to return
+    enum table_query_type query_type: defines on which view the query occurs:
+        MAPISTORE_PREFILTERED_QUERY: has the table already been filtered using set_restrictions or set_sort_order etc. In this case, return the row in this filtered view
+        MAPISTORE_LIVEFILTERED_QUERY: only setcolumns was applied, return rows directly from the raw table results.
+    uint32_t row_id: the index of the row to fetch within the table
+    struct mapistore_property_data **data: the set of data for the row to return
+
+mapistore_property_data is an abstracted way to return data. When OpenChange returns data to a client, it sends them within a DATA_BLOB where values (matching requested properties) are packed one to next,
+sometimes prefixed by an error value to let the client know it didn't found the value or accessing the value was forbidden.
+
+struct mapistore_property_data {
+        void *data;
+        int error;
+};
+
+This mapistore_property_data is just a data structure backends use to fill information. They put the value matching a property in void *data.
+This is used to pass any kind of data back. If the value was found, set error to MAPISTORE_SUCCESS. If an error occurs, set data to NULL and set the error to MAPISTORE_ERR_NOT_FOUND or MAPI_E_NO_ACCESS depending on the status.
+*/
 static enum mapistore_error TableGetRow (void *table_object, TALLOC_CTX *mem_ctx,
                     enum mapistore_query_type query_type, uint32_t row_id,
                     struct mapistore_property_data **data)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("TableGetRow\n"));
+DEBUG(0, ("MAPIEasyLinux : TableGetRow\n"));
 return rc;
 }
 
+/*
+ * get_row_count
+ * This function retrieves the number of row for the specific table given the query_type. 
+ * The function takes in parameter:
+ *
+ *  void *table_object: the table object from which to retrieve the number of rows
+ *  enum table_type query_type: defines on which view the query occurs
+ *  uint32_t *count: the number of rows to return
+
+enum mapistore_query_type {
+	MAPISTORE_PREFILTERED_QUERY,
+	MAPISTORE_LIVEFILTERED_QUERY,
+};
+    
+*/
 static enum mapistore_error TableGetRowCount (void *table_object,
                           enum mapistore_query_type query_type,
                           uint32_t *row_countp)
 {
-int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("TableGetRowCount\n"));
+int rc=MAPISTORE_SUCCESS;
+struct EasyLinuxTable *elTable;
+
+elTable = table_object;
+if( query_type == MAPISTORE_PREFILTERED_QUERY )
+  *row_countp = 0;
+if( query_type == MAPISTORE_LIVEFILTERED_QUERY )
+  *row_countp = 0;
+  
+DEBUG(0, ("MAPIEasyLinux : TableGetRowCount %i Folder: %s\n", query_type, elTable->displayName));
 return rc;
 }
 
+/*
+handle_destructor
+
+This is called automatically from OpenChange server when the table is destroyed or the associated folder is closed. It makes use of the talloc
+hierarchy which creates a tree of memory contexts: parent, children.
+
+When a parent gets deleted, all the children gets also deleted. the destructor function is a callback that can be associated to a TALLOC context and is called before the pointer is free'd.
+
+In this case, the destructor receives the table object. So you know which table is associated and what to destroy. There is also the handle id passed down which let you know (remember the handle id / table object combination discussed earlier) which specific table to delete - if you followed this model.
+The function takes in parameter:
+
+    void *table_object: the table object to destroy
+    unt32_t handle_id: the handle id that was associated to the specific table to delete
+
+
+*/
 static enum mapistore_error TableHandleDestructor (void *table_object, uint32_t handle_id)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("TableHandleDestructor\n"));
+DEBUG(0, ("MAPIEasyLinux : TableHandleDestructor\n"));
 return rc;
 }
 
+/*
+properties.get_available_properties
+
+Similarly to table.get_available_properties, this function returns the set of possible properties 
+that can be set on the specified object. In this case the specified object is generic and it is up 
+to the backend to detect which one it is referring to.
+The function takes in parameter:
+
+    void *object: generic object which can be folder, message etc.
+    TALLOC_CTX *: the memory context to use to allocate the returned set of properties
+    struct SPropTagArray **properties: pointer on pointer to the set of properties to return
+*/
 static enum mapistore_error PropertiesGetAvailableProperties(void *object,
                                                     TALLOC_CTX *mem_ctx,
                                                     struct SPropTagArray **propertiesP)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("PropertiesGetAvailableProperties\n"));
+DEBUG(0, ("MAPIEasyLinux : PropertiesGetAvailableProperties\n"));
 return rc;
 }
 
+/*
+properties.get_properties
+
+This function retrieves the request properties value for the specific generic object. Similarly 
+to properties.get_available_properties, it is up to the backend to detect which object is passed along.
+The function takes in parameter:
+
+    void *object: generic object to retrieve properties value from
+    TALLOC_CTX *: the memory context to use to allocate returned properties data
+    uint16_t count: the number of property tags requested
+    enum MAPITAGS *: the list of property tags requested
+    struct mapistore_property_data *: the set of property data to return (see table.get_row for information on mapistore_property_data)
+*/
 static enum mapistore_error PropertiesGetProperties (void *object,
                                 TALLOC_CTX *mem_ctx,
                                 uint16_t count, enum MAPITAGS *properties,
                                 struct mapistore_property_data *data)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("PropertiesGetProperties\n"));
+DEBUG(0, ("MAPIEasyLinux : PropertiesGetProperties\n"));
 return rc;
 }
 
+/*
+properties.set_properties
+
+This function sets properties on the generic specified object.
+The function takes in parameter:
+
+    void *object: generic object to set properties on
+    struct SRow *aRow: pointer on a SRow structure holding properties to apply
+    
+    
+    union SPropValue_CTR {
+	uint16_t i;/ [case(0x0002)] 
+	uint32_t l;/ [case(0x0003)] 
+	double dbl;/ [case(0x0005)] 
+	uint8_t b;/ [case(0x000b)] 
+	int64_t d;/ [case(0x0014)] 
+	const char *lpszA;/ [unique,charset(DOS),case(0x001e)] 
+	struct Binary_r bin;/ [case(0x0102)] 
+	const char *lpszW;/ [unique,charset(UTF16),case(0x001f)] 
+	struct FlatUID_r *lpguid;/ [unique,case(0x0048)] 
+	struct FILETIME ft;/ [case(0x0040)] 
+	enum MAPISTATUS err;/ [case(0x000a)] 
+	struct ShortArray_r MVi;/ [case(0x1002)] 
+	struct LongArray_r MVl;/ [case(0x1003)] 
+	struct UI8Array_r MVui8;/ [case(0x1014)] 
+	struct StringArray_r MVszA;/ [case(0x101e)] 
+	struct BinaryArray_r MVbin;/ [case(0x1102)] 
+	struct FlatUIDArray_r MVguid;/ [case(0x1048)] 
+	struct StringArrayW_r MVszW;/ [case(0x101f)] 
+	struct DateTimeArray_r MVft;/ [case(0x1040)] 
+	uint32_t null;/ [case(0x0001)] 
+	uint32_t object;/ [case(0x000d)] 
+}  // [noprint,nopull,nopush,switch_type(uint32)] 
+
+struct SPropValue {
+	enum MAPITAGS ulPropTag;  // en HEX
+	uint32_t dwAlignPad;
+	union SPropValue_CTR value; // [switch_is(ulPropTag&0xFFFF)] 
+} // [noprint,nopush,public,nopull] 
+
+struct SRow {
+	uint32_t ulAdrEntryPad;
+	uint32_t cValues; // [range(0,100000)] 
+	struct SPropValue *lpProps; // [unique,size_is(cValues)] 
+}// [noprint,nopush,public,nopull] 
+*/
 static enum mapistore_error PropertiesSetProperties (void *object, struct SRow *aRow)
 {
-DEBUG(0, ("PropertiesSetProperties\n"));
 int rc=MAPISTORE_SUCCESS;
+switch(aRow->lpProps->ulPropTag)
+  {
+  case 0x3001001F: // PidTagDisplayName (0x3001001F) PT_STRING8, PT_UNICODE
+    /*
+    Folders require sibling subfolders to have unique display names. For example, if a folder contains two subfolders, the two subfolders cannot use the same value for this property. This restriction does not apply to other containers, such as address books and distribution lists.
+
+Service providers should set the value of this property so that it contains both the provider type and configuration information. The additional information helps to distinguish between instances of providers of the same type. Unconfigured providers should use a string that names the provider. Configured providers should use the same string followed by a distinguishing string in parentheses. For example, an unconfigured message store provider might set these properties to:
+
+Personal Information Store
+
+The configured version could then set these properties to:
+
+Personal Information Store (February 6, 1998)
+
+For status objects, these properties contain the name of the component that can be displayed by the user interface. 
+    */
+    DEBUG(0, ("MAPIEasyLinux : SetProperties  ulAdrEntryPad: %i  cValues: %i  SetPidTagDisplay(0x%X)  Value :'%s'\n\n",
+                                   aRow->ulAdrEntryPad, aRow->cValues, 
+                                   aRow->lpProps->ulPropTag, aRow->lpProps->value.lpszA));
+    break;
+    
+  case 0x371A001F: 		// PidTagAttachPayloadClass  (0x371A001F)
+  //case 0x1A001F:  		// PidTagIsdnNumber          (0x3A2D001F),
+  case 0x1A001F:      // PidTagMessageClass        (0x1A001F)  PT_UNICODE, PT_STRING8
+    DEBUG(0, ("MAPIEasyLinux :  SetProperties\n  ulAdrEntryPad: %i  cValues: %i  PidTagMessageClass(0x%X)  Value :'%s'\n",
+                                   aRow->ulAdrEntryPad, aRow->cValues, 
+                                   aRow->lpProps->ulPropTag, aRow->lpProps->value.lpszA));
+    break;
+
+  default:
+    DEBUG(0, ("MAPIEasyLinux : PropertiesSetProperties Row(%i - %i) Prop(0x%X, %i) \n",aRow->ulAdrEntryPad, aRow->cValues, aRow->lpProps->ulPropTag, aRow->lpProps->dwAlignPad));
+  }
+  
 return rc;
 }
 
@@ -835,7 +1188,7 @@ static enum mapistore_error ManagerGenerateUri (TALLOC_CTX *mem_ctx,
                            const char *rootURI,
                            char **uri)
 {
-DEBUG(0, ("ManagerGenerateUri\n"));
+DEBUG(0, ("MAPIEasyLinux : ManagerGenerateUri\n"));
 return MAPISTORE_ERR_NOT_IMPLEMENTED;
 }
 
@@ -892,7 +1245,7 @@ else
   backend.folder.copy_folder 									= FolderCopy;
   backend.folder.get_deleted_fmids 						= FolderGetDeletedFmids;
   backend.folder.get_child_count 							= FolderGetChildCount;
-  backend.folder.open_table 									= FolderOpenTable;
+  backend.folder.open_table 									= FolderCreateTable;
   backend.folder.modify_permissions 					= FolderModifyPermissions;
   backend.folder.preload_message_bodies 			= FolderPreloadMessageBodies;
   // Message
@@ -924,7 +1277,7 @@ else
   /* Register ourselves with the MAPISTORE subsystem */
   ret = mapistore_backend_register(&backend);
   if (ret != MAPISTORE_SUCCESS  )
-    DEBUG(0, ("\nFailed to register the '%s' MAPIStore backend!\n", backend.backend.name));
+    DEBUG(0, ("MAPIEasyLinux : Failed to register the '%s' MAPIStore backend!\n", backend.backend.name));
   }
 
 return ret;

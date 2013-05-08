@@ -16,6 +16,7 @@ fi
 
 CFLAGS="-I. $CFLAGS"
 
+ 
 dnl #################################################################
 dnl Check for OS dependent options
 dnl #################################################################
@@ -551,6 +552,13 @@ AC_SUBST(ICAL_CFLAGS)
 AC_SUBST(ICAL_LIBS)
 PKG_CHECK_MODULES([ICAL_0_46], [libical >= 0.46], [have_libical_0_46="1"], [have_libical_0_46="0"])
 AC_SUBST(have_libical_0_46)
+
+dnl --------------------------------------------------------------------------
+dnl Check for libxml2 (EasyLinux Mapistore)
+dnl --------------------------------------------------------------------------
+AM_PATH_XML2([], [], [AC_MSG_ERROR([*** cannot find the libxml2 library ])])
+AC_SUBST(XML_CFLAGS) 
+AC_SUBST(XML_LIBS)    
 
 dnl --------------------------------------------------------------------------
 dnl Check for popt

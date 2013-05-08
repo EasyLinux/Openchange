@@ -37,73 +37,78 @@ printf
 
 int main(int argc, const char *argv[])
 {
-  TALLOC_CTX			*mem_ctx;
-	int				retval;
-	struct mapistore_context	*mstore_ctx;
-	struct loadparm_context		*lp_ctx;
-	poptContext			pc;
-	int				opt;
-	const char			*opt_debug = NULL;
-	uint32_t			context_id = 0;
-	void				*root_folder;
+TALLOC_CTX			*mem_ctx;
+int				retval;
+struct mapistore_context		*mstore_ctx;
+struct loadparm_context			*lp_ctx;
+struct backend_context			*context;
+struct backend_context_list *context_list;
+poptContext			pc;
+int				opt, i;
+const char			*opt_debug = NULL;
+uint32_t			context_id = 0;
+void				*root_folder;
 
-	enum { OPT_DEBUG=1000 };
+enum { OPT_DEBUG=1000 };
 
-	struct poptOption long_options[] = {
+struct poptOption long_options[] = {
 		POPT_AUTOHELP
 		{ "debuglevel",	'd', POPT_ARG_STRING, NULL, OPT_DEBUG,	"set the debug level", NULL },
 		{ NULL, 0, 0, NULL, 0, NULL, NULL }
 	};
 
-	mem_ctx = talloc_named(NULL, 0, "mapistore_test");
-	lp_ctx = loadparm_init_global(true);
-	setup_logging(NULL, DEBUG_STDOUT);
+mem_ctx = talloc_named(NULL, 0, "mapistore_EL_test");
+lp_ctx = loadparm_init_global(true);
+setup_logging(NULL, DEBUG_STDOUT);
 	
-	pc = poptGetContext("mapistore_test", argc, argv, long_options, 0);
-	while ((opt = poptGetNextOpt(pc)) != -1) {
-		switch (opt) {
+pc = poptGetContext("mapistore_test", argc, argv, long_options, 0);
+while ((opt = poptGetNextOpt(pc)) != -1) 
+  {
+	switch (opt) 
+	  {
 		case OPT_DEBUG:
 			opt_debug = poptGetOptArg(pc);
 			break;
 		}
 	}
 
-	poptFreeContext(pc);
+poptFreeContext(pc);
 
-	if (opt_debug) {
-		lpcfg_set_cmdline(lp_ctx, "log level", opt_debug);
-	}
+if (opt_debug) 
+	lpcfg_set_cmdline(lp_ctx, "log level", opt_debug);
 	
-	DEBUG(0, ("Mapping path             : "));
-	retval = mapistore_set_mapping_path("/tmp");
-	if (retval != MAPISTORE_SUCCESS) {
-		DEBUG(0, ("%s\n", mapistore_errstr(retval)));
-		exit (1);
+	
+printf("Mapping path             : ");
+retval = mapistore_set_mapping_path("/tmp");
+if (retval != MAPISTORE_SUCCESS) 
+  {
+	printf("ERROR: %s\n", mapistore_errstr(retval));
+	exit (1);
 	}
-	DEBUG(0, ("OK\n"));
+printf("OK\n");
 
-  DEBUG(0, ("Initialise mapistore     : "));
-	mstore_ctx = mapistore_init(mem_ctx, lp_ctx, NULL);
-	if (!mstore_ctx) {
-		DEBUG(0, ("%s\n", mapistore_errstr(retval)));
-		exit (1);
+printf("Initialise mapistore\n");
+mstore_ctx = mapistore_init(mem_ctx, lp_ctx, NULL);
+if (!mstore_ctx) 
+  {
+	printf("ERROR: %s\n", mapistore_errstr(retval));
+	exit (1);
 	}
-	DEBUG(0, ("OK\n"));
 
-  DEBUG(0, ("Adding context            : "));
-	retval = mapistore_add_context(mstore_ctx, "openchange", "easy://INBOX", -1, &context_id, &root_folder);
-	if (retval != MAPISTORE_SUCCESS) {
-		DEBUG(0, ("%s\n", mapistore_errstr(retval)));
-		exit (1);
+printf("Adding a context (INBOX)\n");
+retval = mapistore_add_context(mstore_ctx, "Administrator", "EasyLinux://INBOX", -1, &context_id, &root_folder);
+if (retval != MAPISTORE_SUCCESS) 
+  {
+	printf("ERROR: %s\n", mapistore_errstr(retval));
+	exit (1);
 	}
-	DEBUG(0, ("OK\n"));
-  DEBUG(0,("    Root folder: %s",(char *)root_folder) );
-
+  //DEBUG(0,("    Root folder: %s",(char *)root_folder) );
+/*
 
   DEBUG(0,("Delete context             : "));
 	retval = mapistore_del_context(mstore_ctx, context_id);
 	DEBUG(0,("OK\n"));
-	
+*/	
 	DEBUG(0,("Release                     : "));
 	retval = mapistore_release(mstore_ctx);
 	if (retval != MAPISTORE_SUCCESS) {

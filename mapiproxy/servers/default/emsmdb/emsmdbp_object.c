@@ -2346,7 +2346,7 @@ static int emsmdbp_object_get_properties_mapistore_root(TALLOC_CTX *mem_ctx, str
 	struct Binary_r			*binr;
 	int				i;
 	uint32_t			contextID;
-        uint32_t                        *obj_count;
+  uint32_t                        *obj_count;
 	uint8_t				*has_subobj;
 	/* time_t				unix_time; */
 	/* NTTIME				nt_time; */

@@ -50,7 +50,7 @@
 
 int SetUserInformation(struct EasyLinuxBackendContext *elBackendContext, TALLOC_CTX *mem_ctx, char *User, struct ldb_context *ldb)
 {
-DEBUG(3, ("SNOEL : Recherche des donnees utilisateur User(%s)\n",User));
+DEBUG(3, ("MAPIEasyLinux : Searching for user(%s) data's\n",User));
 const char *expression = "(uid=%s)";
 char *Search;
 const char * const Attribs[] = {"unixHomeDirectory","gidNumber","uidNumber","displayName",NULL};
@@ -62,11 +62,11 @@ Search = talloc_asprintf(mem_ctx,expression,User);
 
 if( LDB_SUCCESS != ldb_search(ldb, mem_ctx, &resultMsg, NULL, LDB_SCOPE_DEFAULT, Attribs, "%s", Search) )
   {
-  DEBUG(0, ("SNOEL : Problem in search\n"));
-  return 0;
+  DEBUG(0, ("ERROR: MAPIEasyLinux - user informations unavailable !\n"));
+  return MAPISTORE_ERROR;
   }
 
-DEBUG(5, ("SNOEL : %i records returned\n", resultMsg->count));
+DEBUG(5, ("MAPIEasyLinux : %i records returned\n", resultMsg->count));
 
 for (i = 0; i < resultMsg->count; ++i) 
   {
@@ -83,10 +83,10 @@ for (i = 0; i < resultMsg->count; ++i)
       elBackendContext->User.homeDirectory = talloc_strdup(mem_ctx, (char *)MessageElement->values[0].data);
     }
   }
-DEBUG(3, (" User (uid:%i gid:%i displayName:%s homeDirectory:%s \n", elBackendContext->User.uidNumber, elBackendContext->User.gidNumber, 
+DEBUG(3, ("MAPIEasyLinux : User (uid:%i gid:%i displayName:%s homeDirectory:%s \n", elBackendContext->User.uidNumber, elBackendContext->User.gidNumber, 
                                     elBackendContext->User.displayName, elBackendContext->User.homeDirectory));
-
-return 1;
+talloc_unlink(mem_ctx, Search);
+return MAPISTORE_SUCCESS;
 }
 
 /*
@@ -123,23 +123,21 @@ return 1;
 int InitialiseRootFolder(struct EasyLinuxBackendContext *elBackendContext, TALLOC_CTX *mem_ctx, char *User, struct ldb_context *ldb,const char *uri)
 {
 const char *expression = "(MAPIStoreURI=EasyLinux://%s)";
-char *Search;
-//char *Msg;
+char *Search, *Folder;
 const char * const Attribs[] = {"MAPIStoreURI","PidTagDisplayName","cn",NULL};
 struct ldb_result *resultMsg;
 struct ldb_message_element *MessageElement;
 int i,j;
-//int hLog;
 
 Search = talloc_asprintf(mem_ctx,expression,uri);
 
 if( LDB_SUCCESS != ldb_search(ldb, mem_ctx, &resultMsg, NULL, LDB_SCOPE_DEFAULT, Attribs, "%s", Search) )
   {
-  DEBUG(0, ("SNOEL : Problem in search\n"));
-  return 0;
+  DEBUG(0, ("ERROR: MAPIEasyLinux - cannot link FID and MAPISToreName\n"));
+  return MAPISTORE_ERROR;
   }
 
-DEBUG(3, ("SNOEL : InitialiseRootFolder %i records returned for (%s)\n", resultMsg->count, Search));
+DEBUG(3, ("MAPIEasyLinux : InitialiseRootFolder %i records returned for (%s)\n", resultMsg->count, Search));
 
 for (i = 0; i < resultMsg->count; ++i) 
   {
@@ -154,13 +152,36 @@ for (i = 0; i < resultMsg->count; ++i)
       elBackendContext->Folder.FID = atoll( (char *)MessageElement->values[0].data );
     }
   }
-DEBUG(0, (" Folder (displayName:%s Uri:%s int64:%lX)\n", elBackendContext->Folder.displayName, elBackendContext->Folder.Uri, elBackendContext->Folder.FID));
+DEBUG(3, ("MAPIEasyLinux : Folder (displayName:%s Uri:%s int64:%lX)\n", elBackendContext->Folder.displayName, elBackendContext->Folder.Uri, elBackendContext->Folder.FID));
+// MAPIEasyLinux : Folder (displayName:Deferred Action Uri:EasyLinux://FALLBACK/0xef03000000000001/ int64:7FFFFFFFFFFFFFFF)
 
-//Msg = talloc_asprintf(mem_ctx,"Folder (displayName:%s Uri:%s)\n", elBackendContext->Folder.displayName, elBackendContext->Folder.Uri);
+// Remove EasyLinux:// part
+i=0;
+j=1;
+while(j)
+  {
+  if( (elBackendContext->Folder.Uri[i] == '/') && (elBackendContext->Folder.Uri[i+1] == '/') )
+    {
+    j=0;
+    i=i+1;
+    }
+  i++;
+  }
 
-//hLog = open(  "/tmp/Folder.log", O_APPEND | O_RDWR | O_CREAT, S_IWRITE | S_IREAD);
-//write(hLog,Msg,strlen(Msg));
-//close(hLog);
+if( strncmp ("FALLBACK/", &elBackendContext->Folder.Uri[i], 9)==0 )
+  {  // mk xml file  '/home/NET6A/Administrator/Maildir/FALLBACK/Deferred Action.xml'
+  Folder = talloc_asprintf(mem_ctx,"%s.xml",elBackendContext->Folder.displayName);
+  CreateXml(elBackendContext, Folder);  // Folder represent rootfolder for libmapistore -> correspond to a xml file under FALLBACK
+  }
+else if( strncmp("INBOX/", &elBackendContext->Folder.Uri[i], 6)==0 )
+  {
+  DEBUG(0, ("MAPIEasyLinux : mkdir INBOX (%s/Maildir/%s)\n",elBackendContext->User.homeDirectory,&elBackendContext->Folder.Uri[i]));  
+  }
+else
+  {
+  DEBUG(0, ("MAPIEasyLinux : (%s/Maildir/%s)\n",elBackendContext->User.homeDirectory,&elBackendContext->Folder.Uri[i]));  
+  }
 
-return 1;
+talloc_unlink(mem_ctx, Search);
+return MAPISTORE_SUCCESS;
 }
