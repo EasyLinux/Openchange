@@ -145,14 +145,15 @@ for (i = 0; i < resultMsg->count; ++i)
     {
     MessageElement = &resultMsg->msgs[i]->elements[j];
     if( strcmp(MessageElement->name,"MAPIStoreURI") == 0 )
-      elBackendContext->Folder.Uri = talloc_strdup(mem_ctx, (char *)MessageElement->values[0].data);
+      elBackendContext->RootFolder.Uri = talloc_strdup(mem_ctx, (char *)MessageElement->values[0].data);
     if( strcmp(MessageElement->name,"PidTagDisplayName") == 0 )
-      elBackendContext->Folder.displayName = talloc_strdup(mem_ctx, (char *)MessageElement->values[0].data);
+      elBackendContext->RootFolder.displayName = talloc_strdup(mem_ctx, (char *)MessageElement->values[0].data);
     if( strcmp(MessageElement->name,"cn") == 0 )
-      elBackendContext->Folder.FID = atoll( (char *)MessageElement->values[0].data );
+      elBackendContext->RootFolder.FID = atoll( (char *)MessageElement->values[0].data );
     }
   }
-DEBUG(3, ("MAPIEasyLinux : Folder (displayName:%s Uri:%s int64:%lX)\n", elBackendContext->Folder.displayName, elBackendContext->Folder.Uri, elBackendContext->Folder.FID));
+DEBUG(3, ("MAPIEasyLinux : Folder (displayName:%s Uri:%s int64:%lX)\n", elBackendContext->RootFolder.displayName, 
+                     elBackendContext->RootFolder.Uri, elBackendContext->RootFolder.FID));
 // MAPIEasyLinux : Folder (displayName:Deferred Action Uri:EasyLinux://FALLBACK/0xef03000000000001/ int64:7FFFFFFFFFFFFFFF)
 
 // Remove EasyLinux:// part
@@ -160,7 +161,7 @@ i=0;
 j=1;
 while(j)
   {
-  if( (elBackendContext->Folder.Uri[i] == '/') && (elBackendContext->Folder.Uri[i+1] == '/') )
+  if( (elBackendContext->RootFolder.Uri[i] == '/') && (elBackendContext->RootFolder.Uri[i+1] == '/') )
     {
     j=0;
     i=i+1;
@@ -168,18 +169,18 @@ while(j)
   i++;
   }
 
-if( strncmp ("FALLBACK/", &elBackendContext->Folder.Uri[i], 9)==0 )
+if( strncmp ("FALLBACK/", &elBackendContext->RootFolder.Uri[i], 9)==0 )
   {  // mk xml file  '/home/NET6A/Administrator/Maildir/FALLBACK/Deferred Action.xml'
-  Folder = talloc_asprintf(mem_ctx,"%s.xml",elBackendContext->Folder.displayName);
+  Folder = talloc_asprintf(mem_ctx,"%s.xml",elBackendContext->RootFolder.displayName);
   CreateXml(elBackendContext, Folder);  // Folder represent rootfolder for libmapistore -> correspond to a xml file under FALLBACK
   }
-else if( strncmp("INBOX/", &elBackendContext->Folder.Uri[i], 6)==0 )
+else if( strncmp("INBOX/", &elBackendContext->RootFolder.Uri[i], 6)==0 )
   {
-  DEBUG(0, ("MAPIEasyLinux : mkdir INBOX (%s/Maildir/%s)\n",elBackendContext->User.homeDirectory,&elBackendContext->Folder.Uri[i]));  
+  DEBUG(0, ("MAPIEasyLinux : mkdir INBOX (%s/Maildir/%s)\n",elBackendContext->User.homeDirectory,&elBackendContext->RootFolder.Uri[i]));  
   }
 else
   {
-  DEBUG(0, ("MAPIEasyLinux : (%s/Maildir/%s)\n",elBackendContext->User.homeDirectory,&elBackendContext->Folder.Uri[i]));  
+  DEBUG(0, ("MAPIEasyLinux : (%s/Maildir/%s)\n",elBackendContext->User.homeDirectory,&elBackendContext->RootFolder.Uri[i]));  
   }
 
 talloc_unlink(mem_ctx, Search);

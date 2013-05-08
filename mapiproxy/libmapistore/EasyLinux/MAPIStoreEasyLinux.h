@@ -11,13 +11,13 @@ enum EasyLinux_Struct_Type {
 
   
 struct EasyLinuxUser {
-  enum EasyLinux_Struct_Type		stType;
-	char 													*uid;													// uid utilisateur
-	char    											*displayName;									// displayName from Ldap
-	int														uidNumber;
-	int														gidNumber;
-	char													*homeDirectory;
-	char 													*Server;
+  enum EasyLinux_Struct_Type			stType;
+	char 														*uid;													// uid utilisateur
+	char    												*displayName;									// displayName from Ldap
+	int															uidNumber;
+	int															gidNumber;
+	char														*homeDirectory;
+	char 														*Server;
 	};
 	
 struct EasyLinuxFolder {
@@ -34,6 +34,7 @@ struct EasyLinuxMessage {
 	uint64_t												MID;
 	uint8_t 												associated;
 	char 														*displayName;
+	char														*MessageClass;
 	struct EasyLinuxFolder					*parent_folder;
 	struct EasyLinuxBackendContext  *elContext;
 	};
@@ -53,10 +54,15 @@ struct EasyLinuxBackendContext {
   TALLOC_CTX 											*mem_ctx;
 	struct EasyLinuxUser	  				User;
 	struct EasyLinuxFolder  				RootFolder;
+	struct EasyLinuxTable           Table;
 //	struct EasyLinuxMessage Message;
 //	struct EasyLinuxTable   Table;
 	};
 	
+struct EasyLinuxGeneric {
+  enum EasyLinux_Struct_Type			stType;
+  };	
+
 // - a backend object
 // - a context object
 // - a folder object
@@ -86,4 +92,5 @@ int GetMaildirChildCount(struct EasyLinuxFolder *, uint32_t);
 int CreateXml(struct EasyLinuxBackendContext *, char *);
 int RecursiveMkDir(struct EasyLinuxBackendContext *, char *, mode_t);
 int CreateXmlFile(struct EasyLinuxBackendContext *, char *);
+int SaveMessageXml(struct EasyLinuxMessage *, TALLOC_CTX *);
 

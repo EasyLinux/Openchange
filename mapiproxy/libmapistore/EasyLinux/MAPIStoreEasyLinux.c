@@ -27,24 +27,6 @@
  * \date  2013-04-10
  *
  * Initialisation routines of OpenChange EasyLinux storage backend.
- 
- BackendListContexts
- 
- CreateContext
- InitialiseRootFolder
- 
- 
- 
- ContextGetPath
- CreateContext
- ContextGetRootFolder
- SetProperties SetPidTagDisplay Value :'Freebusy Data'
- FolderOpenTable  FALLBACK/0x9a03000000000001/ Type: MESSAGE_TABLE
- TableGetRowCount
- FolderCreateMessage
- SetProperties   PidTagMessageClass(0x1A001F) Value :'IPM.Microsoft.ScheduleData.FreeBusy'
- MessageSave
- 
  *
  */
 
@@ -80,24 +62,30 @@ return MAPISTORE_SUCCESS;
 }
 
 /*
-You will notice there is no function to delete a context explicitly within the backend. This is because the mapistore interface deletes a backend on its own by free'ing the memory context used by this backend.
-
-However, backend's developers are required to allocate their internal data with the memory context passed during create_context and associate a talloc destructor function. If additional operations need to be performed such as close a file descriptor, socket or call the language specific memory release system (garbage collector, pool etc.)
-
-When mapistore will delete the context (free up memory), the hierarchy will automatically be processed and the destructor function for the backend will be called. This is in this internal function that you need to implement actions such as close (fd, socket) etc.
-
-To create a talloc destructor, call the following function:
-
-talloc_set_destructor((void *)context, (int (*)(void *))destructor_fct);
-
-In this example context is the structure allocated with the memory context passed in parameter of the create_context function. An example of the destructor function would looks like:
-*/
+ * You will notice there is no function to delete a context explicitly within the backend. This is because the mapistore 
+ * interface deletes a backend on its own by free'ing the memory context used by this backend.
+ *
+ * However, backend's developers are required to allocate their internal data with the memory context passed during 
+ * create_context and associate a talloc destructor function. If additional operations need to be performed such as 
+ * close a file descriptor, socket or call the language specific memory release system (garbage collector, pool etc.)
+ *
+ * When mapistore will delete the context (free up memory), the hierarchy will automatically be processed and the 
+ * destructor function for the backend will be called. This is in this internal function that you need to implement 
+ * actions such as close (fd, socket) etc.
+ *
+ * To create a talloc destructor, call the following function:
+ *
+ * talloc_set_destructor((void *)context, (int (*)(void *))destructor_fct);
+ * 
+ * In this example context is the structure allocated with the memory context passed in parameter of the 
+ * create_context function. An example of the destructor function would looks like:
+ */
 static int BackendDestructor(void *data)
 {
 // perform operations to clean-up everything properly 
 DEBUG(0, ("MAPIEasyLinux : Appel du destructeur\n"));
 
-return 0;
+return MAPISTORE_SUCCESS;
 }
 
 
@@ -133,7 +121,7 @@ elBackendContext->stType = EASYLINUX_BACKEND;
 *backend_object = (void *)elBackendContext;
 if( !conn_info )
   {
-  DEBUG(0,("MAPIEasyLinux : CreateContext No Conn Information !\n"));
+  DEBUG(0,("ERROR : MAPIEasyLinux - CreateContext No Conn Information !\n"));
   return MAPISTORE_ERR_NOT_FOUND;
   }
   
@@ -143,13 +131,12 @@ if( SetUserInformation(elBackendContext, mem_ctx, conn_info->username, conn_info
 
 // Retrieve MAPI letteral Name
 if( !conn_info->oc_ctx )
-  DEBUG(0,("ERROR: MAPIEasyLinux - CreateContext No indexing !\n"));
+  DEBUG(0,("ERROR: MAPIEasyLinux - CreateContext No indexing file !\n"));
 if( InitialiseRootFolder(elBackendContext, mem_ctx, conn_info->username, conn_info->oc_ctx, uri) != MAPISTORE_SUCCESS)
   return MAPISTORE_ERR_INVALID_PARAMETER;
 elBackendContext->RootFolder.stType = EASYLINUX_FOLDER;  
 elBackendContext->RootFolder.Valid=1;
 elBackendContext->RootFolder.Uri=talloc_strdup(mem_ctx, uri);
-//elBackendContext->Folder.displayName=talloc_strdup(mem_ctx, uri);
 elBackendContext->mem_ctx = mem_ctx;
 elBackendContext->RootFolder.elContext = elBackendContext;
 
@@ -309,7 +296,7 @@ return MAPISTORE_SUCCESS;
  * functions returns a folder representation of the context object created. It lets backends directly call folder operations on 
  * contexts rather than having to open (again) the folder to call its operations.
  */
-static enum mapistore_error ContextGetRootFolder(void *backend_object, TALLOC_CTX *mem_ctx, uint64_t fid, void **object)  
+static enum mapistore_error ContextGetRootFolder(void *backend_object, TALLOC_CTX *mem_ctx, uint64_t fid, void **folder_object)  
 {
 int rc=MAPISTORE_SUCCESS;  // MAPISTORE_ERR_NO_DIRECTORY    MAPISTORE_SUCCESS
 struct EasyLinuxBackendContext *elBackendContext;
@@ -317,8 +304,7 @@ struct EasyLinuxBackendContext *elBackendContext;
 elBackendContext = (struct EasyLinuxBackendContext *)backend_object;
 
 DEBUG(0,("MAPIEasyLinux : ContextGetRootFolder (%lX) - (%s)\n",elBackendContext->RootFolder.FID, elBackendContext->RootFolder.displayName));
-//*object = backend_object;
-*object = &elBackendContext->RootFolder;
+*folder_object = &elBackendContext->RootFolder;
 
 // DEBUG(0, ("MAPIEasyLinux : ContextGetRootFolder (%lX)\n",fid));
 return rc;
@@ -491,7 +477,6 @@ static enum mapistore_error FolderCreateMessage(void *parent_folder,
                            void **message_object)
 {
 int rc=MAPISTORE_SUCCESS;
-//struct EasyLinuxBackendContext *elBackendContext;
 struct EasyLinuxFolder  *elFolder;
 struct EasyLinuxMessage *elMessage;
 
@@ -505,7 +490,7 @@ elMessage->associated = associated;
 elMessage->parent_folder = elFolder;
 elMessage->elContext = elFolder->elContext;
 
-*message_object = &elMessage;
+*message_object = (void *)elMessage;
 
 DEBUG(0, ("MAPIEasyLinux : FolderCreateMessage\n"));
 return rc;
@@ -589,7 +574,8 @@ This function creates a table object to be used along with backend's table opera
 - uint8_t table_type: the table type to create. See below for possible table_type valuesFolder.displayName
 - uint32_t handle_id: Exchange temporary id for the object. Used for the moment for notifications on table
 - void **table_object: the table object to return
-- uint32_t *row_count: the number of row of the table to be returned. It is used by OpenChange server and returned clients, so they know how many rows are available and how much they can query.
+- uint32_t *row_count: the number of row of the table to be returned. It is used by OpenChange server and returned 
+  clients, so they know how many rows are available and how much they can query.
 
 Possible values for table_type are:
 - MAPISTORE_MESSAGE_TABLE: creates a table which only lists messages
@@ -597,11 +583,14 @@ Possible values for table_type are:
 - MAPISTORE_FOLDER_TABLE: creates a table which only lists folders
 - MAPISTORE_PERMISSION_TABLE: creates a table which list permissions for the folder
 
-For the handle_id, it is a hackish implementation from SOGo. It is used to process notifications on tables when registered by clients. This number is associated with the table objects and the couple is used to find a table and trigger a notification payload upon table changes.
+For the handle_id, it is a hackish implementation from SOGo. It is used to process notifications on 
+tables when registered by clients. This number is associated with the table objects and the couple 
+is used to find a table and trigger a notification payload upon table changes.
 
 The handling of handle_id can be avoided for now as it is likely to change with OCSManager final implementation.
 
-OpenChange is waiting for a table_object (void **) which it doesn't care about, but will pass it to your backend when a new table operation occurs. It is also waiting for the number of rows in the table (uint32_t *row_count)
+OpenChange is waiting for a table_object (void **) which it doesn't care about, but will pass it to your 
+backend when a new table operation occurs. It is also waiting for the number of rows in the table (uint32_t *row_count)
 */
 static enum mapistore_error FolderCreateTable(void *folder_object, TALLOC_CTX *mem_ctx,
                        enum mapistore_table_type table_type, uint32_t handle_id,
@@ -614,9 +603,16 @@ struct EasyLinuxTable  *elTable;
 struct EasyLinuxFolder *elFolder;
 
 elFolder = (struct EasyLinuxFolder *)folder_object;
-elTable = talloc_zero_size(mem_ctx, sizeof(struct EasyLinuxTable));
-*table_object = &elTable;
+//elTable = talloc_zero_size(mem_ctx, sizeof(struct EasyLinuxTable));
+elTable = &elFolder->elContext->Table;
 
+if( elTable == NULL )
+  {
+  DEBUG(0,("ERROR: MAPIEasyLinux - Cannot allocate memory for table\n"));
+  return MAPISTORE_ERROR;
+  }
+//*table_object = (void *)elTable;
+*table_object = (void *)elFolder;
 
 tType = (uint8_t)table_type;
 switch( tType )
@@ -630,17 +626,19 @@ switch( tType )
   case 1:   // MAPISTORE_FOLDER_TABLE
     sType = talloc_strdup(mem_ctx, "FOLDER_TABLE");
     break;
+  default:  // Unknown
+    sType = talloc_strdup(mem_ctx, "UNKNOW_TABLE");
+    break;
   }  
 
-elTable->stType = EASYLINUX_TABLE;
-elTable->rowCount = 0;
-elTable->IdTable = handle_id;
-elTable->tType  = tType;
+elTable->stType        = EASYLINUX_TABLE;
+elTable->rowCount      = 0;
+elTable->IdTable       = handle_id;
+elTable->tType         = tType;
 elTable->parent_folder = folder_object;
-elTable->elContext = elFolder->elContext;
-*row_count = elTable->rowCount;
+elTable->elContext     = elFolder->elContext;
+*row_count             = 0;
 
-//DEBUG(0, ("MAPIEasyLinux :\n"));
 DEBUG(0, ("MAPIEasyLinux : FolderCreateTable - Creer table\n"));
 DEBUG(0, ("MAPIEasyLinux :       Parent :%s\n",elFolder->displayName));
 DEBUG(0, ("MAPIEasyLinux :       Table:%s  Type: %s  Id Table: %i\n",elFolder->displayName, sType, handle_id));
@@ -782,15 +780,20 @@ return rc;
  * This function takes in parameter the message object. This is for example used when you create or edit a calendar, 
  * note, task or draft item.
 */
-static enum mapistore_error MessageSave (void *object, TALLOC_CTX *mem_ctx)
+static enum mapistore_error MessageSave (void *message_object, TALLOC_CTX *mem_ctx)
 {
 int rc=MAPISTORE_SUCCESS;
-DEBUG(0, ("MAPIEasyLinux : MessageSave TODO\n"));
+// On a besoin de :
+SaveMessageXml(message_object, mem_ctx);
+
+
+DEBUG(0, ("MAPIEasyLinux : MessageSave\n"));
 return rc;
 }
 
 /**
-This operation push a message for dispatch. It only apply to emails or appointment invitation. The client expects the message to be sent to the spooler and dispatched to specified recipients.
+This operation push a message for dispatch. It only apply to emails or appointment invitation. The client 
+expects the message to be sent to the spooler and dispatched to specified recipients.
 The function takes in parameters:
 
     void *message_object: the message object to submit
@@ -891,15 +894,15 @@ return rc;
  * This is however already covered by Exchange specifications in [MS-OXCDATA] section 2.12.
  *
  */
-static enum mapistore_error TableSetRestrictions (void *object, struct mapi_SRestriction *restrictions, uint8_t *table_status)
+static enum mapistore_error TableSetRestrictions (void *table_object, struct mapi_SRestriction *restrictions, uint8_t *table_status)
 {
 int rc=MAPISTORE_SUCCESS;
 char     *sRes, *sMsg;
 TALLOC_CTX *mem_ctx;
-struct EasyLinuxBackendContext *Object;
+struct EasyLinuxTable *elTable;
 
-Object = object;
-mem_ctx= Object->mem_ctx;
+elTable = (struct EasyLinuxTable *)table_object;
+mem_ctx= elTable->elContext->mem_ctx;
 
 switch(restrictions->rt)
   {
@@ -1025,7 +1028,7 @@ if( query_type == MAPISTORE_PREFILTERED_QUERY )
 if( query_type == MAPISTORE_LIVEFILTERED_QUERY )
   *row_countp = 0;
   
-DEBUG(0, ("MAPIEasyLinux : TableGetRowCount %i Folder: %s\n", query_type, elTable->displayName));
+DEBUG(0, ("MAPIEasyLinux : TableGetRowCount %i Folder: \n", query_type));
 return rc;
 }
 
@@ -1145,13 +1148,43 @@ struct SRow {
 static enum mapistore_error PropertiesSetProperties (void *object, struct SRow *aRow)
 {
 int rc=MAPISTORE_SUCCESS;
+struct EasyLinuxGeneric *elGeneric;
+struct EasyLinuxFolder  *elFolder;
+struct EasyLinuxMessage *elMessage;
+struct EasyLinuxTable   *elTable;
+
+elGeneric = (struct EasyLinuxGeneric *)object;
+switch( elGeneric->stType )
+  {
+  case EASYLINUX_FOLDER:
+    elFolder = (struct EasyLinuxFolder *)object;
+    break;
+  case EASYLINUX_MSG:
+    elMessage = (struct EasyLinuxMessage *)object;
+    break;
+  case EASYLINUX_TABLE:
+    elTable = (struct EasyLinuxTable *)object;
+    break;
+  default:
+    DEBUG(0,("ERROR: MAPIEasyLinux - Unknown object type (%i)\n",elGeneric->stType));
+    break;
+  }
+
+
+
 switch(aRow->lpProps->ulPropTag)
   {
   case 0x3001001F: // PidTagDisplayName (0x3001001F) PT_STRING8, PT_UNICODE
     /*
-    Folders require sibling subfolders to have unique display names. For example, if a folder contains two subfolders, the two subfolders cannot use the same value for this property. This restriction does not apply to other containers, such as address books and distribution lists.
+    Folders require sibling subfolders to have unique display names. For example, if a folder 
+    contains two subfolders, the two subfolders cannot use the same value for this property. This 
+    restriction does not apply to other containers, such as address books and distribution lists.
 
-Service providers should set the value of this property so that it contains both the provider type and configuration information. The additional information helps to distinguish between instances of providers of the same type. Unconfigured providers should use a string that names the provider. Configured providers should use the same string followed by a distinguishing string in parentheses. For example, an unconfigured message store provider might set these properties to:
+Service providers should set the value of this property so that it contains both the provider 
+type and configuration information. The additional information helps to distinguish between 
+instances of providers of the same type. Unconfigured providers should use a string that names 
+the provider. Configured providers should use the same string followed by a distinguishing 
+string in parentheses. For example, an unconfigured message store provider might set these properties to:
 
 Personal Information Store
 
@@ -1161,21 +1194,22 @@ Personal Information Store (February 6, 1998)
 
 For status objects, these properties contain the name of the component that can be displayed by the user interface. 
     */
-    DEBUG(0, ("MAPIEasyLinux : SetProperties  ulAdrEntryPad: %i  cValues: %i  SetPidTagDisplay(0x%X)  Value :'%s'\n\n",
+    DEBUG(0, ("MAPIEasyLinux : SetProperties  ulAdrEntryPad: %i  cValues: %i  SetPidTagDisplay(0x%X)  Value :'%s'  stType: %i\n",
                                    aRow->ulAdrEntryPad, aRow->cValues, 
-                                   aRow->lpProps->ulPropTag, aRow->lpProps->value.lpszA));
+                                   aRow->lpProps->ulPropTag, aRow->lpProps->value.lpszA, elGeneric->stType));
     break;
     
-  case 0x371A001F: 		// PidTagAttachPayloadClass  (0x371A001F)
+  //case 0x371A001F: 		// PidTagAttachPayloadClass  (0x371A001F)
   //case 0x1A001F:  		// PidTagIsdnNumber          (0x3A2D001F),
   case 0x1A001F:      // PidTagMessageClass        (0x1A001F)  PT_UNICODE, PT_STRING8
-    DEBUG(0, ("MAPIEasyLinux :  SetProperties\n  ulAdrEntryPad: %i  cValues: %i  PidTagMessageClass(0x%X)  Value :'%s'\n",
-                                   aRow->ulAdrEntryPad, aRow->cValues, 
-                                   aRow->lpProps->ulPropTag, aRow->lpProps->value.lpszA));
+    // Concern Message object only
+    elMessage->MessageClass = talloc_strdup(elMessage->elContext->mem_ctx, aRow->lpProps->value.lpszA);
+    DEBUG(0, ("MAPIEasyLinux :  PidTagMessageClass :'%s'\n",aRow->lpProps->value.lpszA));
     break;
 
   default:
-    DEBUG(0, ("MAPIEasyLinux : PropertiesSetProperties Row(%i - %i) Prop(0x%X, %i) \n",aRow->ulAdrEntryPad, aRow->cValues, aRow->lpProps->ulPropTag, aRow->lpProps->dwAlignPad));
+    DEBUG(0, ("MAPIEasyLinux : SetProperties Row(%i - %i) Prop(0x%X, %i) stType: %i\n",aRow->ulAdrEntryPad, aRow->cValues, aRow->lpProps->ulPropTag,
+               aRow->lpProps->dwAlignPad, elGeneric->stType));
   }
   
 return rc;
