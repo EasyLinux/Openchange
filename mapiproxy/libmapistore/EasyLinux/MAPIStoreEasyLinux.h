@@ -9,6 +9,16 @@ enum EasyLinux_Struct_Type {
 	EASYLINUX_BACKEND=(int)5
 };
 
+enum EasyLinux_Backend_Type {
+	EASYLINUX_FALLBACK=(int)1,
+	EASYLINUX_MAILDIR=(int)2,
+	EASYLINUX_CALENDAR=(int)3,
+	EASYLINUX_CONTACTS=(int)4,
+	EASYLINUX_TASKS=(int)5,
+	EASYLINUX_NOTES=(int)6,
+	EASYLINUX_JOURNAL=(int)7,
+	EASYLINUX_UNKNOW=(int)999
+	};
   
 struct EasyLinuxUser {
   enum EasyLinux_Struct_Type			stType;
@@ -22,11 +32,16 @@ struct EasyLinuxUser {
 	
 struct EasyLinuxFolder {
   enum EasyLinux_Struct_Type			stType;
-  int															Valid;
 	char 														*Uri;
 	uint64_t												FID;
 	char 														*displayName;
-	struct EasyLinuxBackendContext  *elContext;
+	char 														*Comment;
+	char 														*RelPath;
+	char														*FullPath;
+	int 														FolderType;   // FOLDER_ROOT=0x0, FOLDER_GENERIC=0x1, FOLDER_SEARCH=0x2
+	struct EasyLinuxFolder					*Parent;
+	struct EasyLinuxTable           *Table;
+	struct EasyLinuxContext         *elContext;
 	};
 
 struct EasyLinuxMessage {
@@ -36,27 +51,44 @@ struct EasyLinuxMessage {
 	char 														*displayName;
 	char														*MessageClass;
 	struct EasyLinuxFolder					*parent_folder;
-	struct EasyLinuxBackendContext  *elContext;
+	struct EasyLinuxTable           *Table;
+	struct EasyLinuxContext         *elContext;
 	};
+
+/*
+ *   Table represent a data in Openchange 
+ *
+ *   stType                 identify structure as Table (needed when void * is use by function)
+ *   elParent               point to parent (Folder or Message) object
+ *   elContext							point to Context object
+ *   rowCount               number of records in Table
+ *   Props                  point to Properties
+ */
 	  
 struct EasyLinuxTable {
   enum EasyLinux_Struct_Type			stType;
-	int															IdTable;
-	int															tType;
+	void                  					*elParent;
+	struct EasyLinuxContext         *elContext;
 	uint32_t												rowCount;
-	char 														*displayName;
-	struct EasyLinuxFolder					*parent_folder;
-	struct EasyLinuxBackendContext  *elContext;
+	struct EasyLinuxProp						*Props;
 	};
 	
-struct EasyLinuxBackendContext {
+struct EasyLinuxProp {
+	uint32_t												PropTag;
+	int															PropType;
+	void														*PropValue;
+	};	
+	
+	
+	
+struct EasyLinuxContext {
   enum EasyLinux_Struct_Type			stType;
+  enum EasyLinux_Backend_Type			bkType;
   TALLOC_CTX 											*mem_ctx;
+  void														*bkContext;
 	struct EasyLinuxUser	  				User;
 	struct EasyLinuxFolder  				RootFolder;
 	struct EasyLinuxTable           Table;
-//	struct EasyLinuxMessage Message;
-//	struct EasyLinuxTable   Table;
 	};
 	
 struct EasyLinuxGeneric {
@@ -80,17 +112,62 @@ struct EasyLinuxGeneric {
 int mapistore_init_backend(void);
  	
 /*
- * EasyLinux_Ldap_Funcs functions
+ * EasyLinux_Common functions
  */
-int SetUserInformation(struct EasyLinuxBackendContext *, TALLOC_CTX *, char *, struct ldb_context *);
-int InitialiseRootFolder(struct EasyLinuxBackendContext *, TALLOC_CTX *, char *, struct ldb_context *,const char *);
+enum EasyLinux_Backend_Type GetBkType(char *);
+int RecursiveMkDir(struct EasyLinuxContext *, char *, mode_t);
+void Dump(void *);
+  	
+/*
+ * EasyLinux_Ldap functions
+ */
+int SetUserInformation(struct EasyLinuxContext *, TALLOC_CTX *, char *, struct ldb_context *);
+int InitialiseRootFolder(struct EasyLinuxContext *, TALLOC_CTX *, char *, struct ldb_context *,const char *);
+
+/*
+ * EasyLinux Calendar functions 
+ */
+void OpenCalendar(struct EasyLinuxContext *);
+int  GetCalendars(struct EasyLinuxFolder *);
+ 
+/*
+ * EasyLinux Notes functions 
+ */
+void OpenNotes(struct EasyLinuxContext *);
+int  GetNotes(struct EasyLinuxFolder *);
+
+/*
+ * EasyLinux Tasks functions 
+ */
+void OpenTasks(struct EasyLinuxContext *);
+int  GetTasks(struct EasyLinuxFolder *);
+
+/*
+ * EasyLinux Contacts functions 
+ */
+void OpenContacts(struct EasyLinuxContext *);
+int  GetContacts(struct EasyLinuxFolder *);
+
+/*
+ * EasyLinux Journal functions 
+ */
+void OpenJournal(struct EasyLinuxContext *);
+int  GetJournal(struct EasyLinuxFolder *);
 
 /*
  * EasyLinux_Maildir functions
  */
+enum mapistore_error OpenMailDir(struct EasyLinuxContext *);
+int OmmitSpecialFolder(struct EasyLinuxFolder *, char *);
 int GetMaildirChildCount(struct EasyLinuxFolder *, uint32_t);
-int CreateXml(struct EasyLinuxBackendContext *, char *);
-int RecursiveMkDir(struct EasyLinuxBackendContext *, char *, mode_t);
-int CreateXmlFile(struct EasyLinuxBackendContext *, char *);
+enum mapistore_error MailDirCreateFolder(struct EasyLinuxFolder *);
+char *ImapToMaildir(TALLOC_CTX *, char *);
+
+/*
+ *  EasyLinux_Xml functions
+ */
+int OpenFallBack(struct EasyLinuxContext *);
+int CreateXmlFile(struct EasyLinuxContext *);
 int SaveMessageXml(struct EasyLinuxMessage *, TALLOC_CTX *);
+int CloseXml(struct EasyLinuxContext *);
 

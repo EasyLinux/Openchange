@@ -118,7 +118,7 @@ re:: clean install
 	@$(CC) $(CFLAGS) -fPIC -c $< -o $@
 
 .c.xpo:
-	@echo "Compiling $< with -fPIC with Xml2"
+	@echo "Compiling $< with -fPIC and Xml2"
 	@$(CC) $(CFLAGS) -I/usr/include/libxml2 -fPIC -c $< -o $@
 
 .cpp.o:
@@ -909,7 +909,7 @@ mapiproxy/libmapistore.$(SHLIBEXT).$(PACKAGE_VERSION): 	mapiproxy/libmapistore/m
 							mapiproxy/libmapistore/mapistore_interface.po			\
 							mapiproxy/libmapistore/mgmt/mapistore_mgmt.po			\
 							mapiproxy/libmapistore/mgmt/mapistore_mgmt_messages.po		\
-							mapiproxy/libmapistore/mgmt/mapistore_mgmt_send.po		\
+							mapiproxy/libmapistore/mgmt/mapistore_mgmt_send.po	\
 							mapiproxy/libmapistore/mapistore_processing.po			\
 							mapiproxy/libmapistore/mapistore_backend.po			\
 							mapiproxy/libmapistore/mapistore_backend_defaults.po		\
@@ -936,9 +936,17 @@ LIBEASY_SO_VERSION = 0.2
 
 libeasy:  mapiproxy/libmapistore/EasyLinux/MAPIStoreEasyLinux.$(SHLIBEXT).$(LIBEASY_SO_VERSION) 
 
-mapiproxy/libmapistore/EasyLinux/MAPIStoreEasyLinux.$(SHLIBEXT).$(LIBEASY_SO_VERSION): 	 mapiproxy/libmapistore/EasyLinux/MAPIStoreEasyLinux.po \
-    mapiproxy/libmapistore/EasyLinux/EasyLinux_Ldap_Funcs.po \
-    mapiproxy/libmapistore/EasyLinux/EasyLinux_Maildir.xpo \
+mapiproxy/libmapistore/EasyLinux/MAPIStoreEasyLinux.$(SHLIBEXT).$(LIBEASY_SO_VERSION): 	 \
+		mapiproxy/libmapistore/EasyLinux/MAPIStoreEasyLinux.po \
+    mapiproxy/libmapistore/EasyLinux/EasyLinux_Common.po \
+    mapiproxy/libmapistore/EasyLinux/EasyLinux_Ldap.po \
+    mapiproxy/libmapistore/EasyLinux/EasyLinux_Xml.xpo \
+    mapiproxy/libmapistore/EasyLinux/EasyLinux_Calendar.po \
+    mapiproxy/libmapistore/EasyLinux/EasyLinux_Contact.po \
+    mapiproxy/libmapistore/EasyLinux/EasyLinux_Tasks.po \
+    mapiproxy/libmapistore/EasyLinux/EasyLinux_Notes.po \
+    mapiproxy/libmapistore/EasyLinux/EasyLinux_Journal.po \
+    mapiproxy/libmapistore/EasyLinux/EasyLinux_Maildir.po \
 		mapiproxy/libmapistore.$(SHLIBEXT).$(PACKAGE_VERSION)
 		@echo "Link libmapistore"
 		@$(CC) -o $@ $^ $(DSOOPT) $(LDFLAGS) -lldap -llber -lxml2 -Wl,-soname,MAPIStoreEasyLinux.$(SHLIBEXT).$(LIBEASY_SO_VERSION)
@@ -948,6 +956,7 @@ libeasy-install:  mapiproxy/libmapistore/EasyLinux/MAPIStoreEasyLinux.$(SHLIBEXT
   
 libeasy-clean:	
 	rm -f mapiproxy/libmapistore/EasyLinux/*.po
+	rm -f mapiproxy/libmapistore/EasyLinux/*.xpo
 	rm -f mapiproxy/libmapistore/EasyLinux/*.$(SHLIBEXT).$(LIBEASY_SO_VERSION)
 
 libeasy-distclean:: libeasy-clean

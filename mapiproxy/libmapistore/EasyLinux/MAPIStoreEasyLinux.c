@@ -57,6 +57,8 @@
 static enum mapistore_error BackendInit (void)
 {
 // On doit connaitre le serveur Ldap, les éléments de connexion, initialiser la connexion
+DEBUG(0,("MAPIEasyLinux : \n"));
+DEBUG(0,("MAPIEasyLinux : \n"));
 DEBUG(0,("MAPIEasyLinux : BackendInit\n"));
 return MAPISTORE_SUCCESS;
 }
@@ -80,10 +82,10 @@ return MAPISTORE_SUCCESS;
  * In this example context is the structure allocated with the memory context passed in parameter of the 
  * create_context function. An example of the destructor function would looks like:
  */
-static int BackendDestructor(void *data)
+static int BackendDestructor(void *Object)
 {
 // perform operations to clean-up everything properly 
-DEBUG(0, ("MAPIEasyLinux : Appel du destructeur\n"));
+
 
 return MAPISTORE_SUCCESS;
 }
@@ -109,39 +111,37 @@ return MAPISTORE_SUCCESS;
 static enum mapistore_error BackendCreateContext(TALLOC_CTX *mem_ctx,
                             struct mapistore_connection_info *conn_info,
                             struct tdb_wrap *indexingTdb,
-                            const char *uri, void **backend_object)
+                            const char *uri, void **context_object)
 {
-struct EasyLinuxBackendContext *elBackendContext;
+struct EasyLinuxContext *elContext;
 
-DEBUG(0, ("MAPIEasyLinux : CreateContext Uri(%s)\n",uri ));
 
-elBackendContext = (struct EasyLinuxBackendContext *)talloc_zero_size(mem_ctx, sizeof(struct EasyLinuxBackendContext) );
-elBackendContext->stType = EASYLINUX_BACKEND;
+// Initialise Backend structure
+elContext = (struct EasyLinuxContext *)talloc_zero_size(mem_ctx, sizeof(struct EasyLinuxContext) );
+elContext->stType 	= EASYLINUX_BACKEND;
+elContext->mem_ctx  = mem_ctx;
+*context_object = (void *)elContext;
 
-*backend_object = (void *)elBackendContext;
 if( !conn_info )
-  {
+  {  // We need connection information to get user and Openchange.ldb pointer
   DEBUG(0,("ERROR : MAPIEasyLinux - CreateContext No Conn Information !\n"));
-  return MAPISTORE_ERR_NOT_FOUND;
+  return MAPISTORE_ERR_CONTEXT_FAILED;
   }
   
-// Retreive user informations from Ldap
-if( SetUserInformation(elBackendContext, mem_ctx, conn_info->username, conn_info->sam_ctx) != MAPISTORE_SUCCESS)
-  return MAPISTORE_ERR_INVALID_PARAMETER;
+// Retreive user informations from Ldap thru ldbsearch
+if( SetUserInformation(elContext, mem_ctx, conn_info->username, conn_info->sam_ctx) != MAPISTORE_SUCCESS)
+  return MAPISTORE_ERR_CONTEXT_FAILED;
 
-// Retrieve MAPI letteral Name
-if( !conn_info->oc_ctx )
+// Retrieve MAPI litteral Name
+if( !conn_info->oc_ctx )  // We need connection information to get user and Openchange.ldb pointer
   DEBUG(0,("ERROR: MAPIEasyLinux - CreateContext No indexing file !\n"));
-if( InitialiseRootFolder(elBackendContext, mem_ctx, conn_info->username, conn_info->oc_ctx, uri) != MAPISTORE_SUCCESS)
-  return MAPISTORE_ERR_INVALID_PARAMETER;
-elBackendContext->RootFolder.stType = EASYLINUX_FOLDER;  
-elBackendContext->RootFolder.Valid=1;
-elBackendContext->RootFolder.Uri=talloc_strdup(mem_ctx, uri);
-elBackendContext->mem_ctx = mem_ctx;
-elBackendContext->RootFolder.elContext = elBackendContext;
+// Initialise Root Folder (in Easyinux_Ldap.c)  
+if( InitialiseRootFolder(elContext, mem_ctx, conn_info->username, conn_info->oc_ctx, uri) != MAPISTORE_SUCCESS)
+  return MAPISTORE_ERR_CONTEXT_FAILED;
 
+DEBUG(0, ("MAPIEasyLinux : CreateContext - Uri:%s (%s)\n",uri, elContext->RootFolder.FullPath ));  
 // MAPIStore backend don't include a destructor function capability, we want one 
-talloc_set_destructor((void *)mem_ctx, (int (*)(void *))BackendDestructor);
+talloc_set_destructor((void *)elContext, (int (*)(void *))BackendDestructor);
 return MAPISTORE_SUCCESS;
 }
 
@@ -185,8 +185,10 @@ static enum mapistore_error BackendListContexts(const char *username, struct tdb
 int rc=MAPISTORE_SUCCESS;  // MAPISTORE_ERR_NO_DIRECTORY  MAPISTORE_SUCCESS   MAPISTORE_ERROR
 int i=0;
 struct mapistore_contexts_list *Context, *ContextOld, *ContextNew;
-char *ContextRole[]={"INBOX","INBOX/Draft", "INBOX/Sent", "INBOX/Outbox","INBOX/Trash","CALENDAR","CONTACTS","TASKS",
+char *ContextRole[] = {"INBOX","INBOX/Drafts", "INBOX/Sent", "INBOX/Outbox","INBOX/Trash","CALENDAR","CONTACTS","TASKS",
                      "NOTES","JOURNAL","FALLBACK","MAX"};
+char *NameRole[] = {"Inbox","Drafts", "Sent", "Outbox","Trash","Calendar","Contacts","Tasks",
+                     "Notes","Journal","Fallback","Max"};
 enum mapistore_context_role  Roles[]= {MAPISTORE_MAIL_ROLE, 	MAPISTORE_DRAFTS_ROLE, 	MAPISTORE_SENTITEMS_ROLE,
                      MAPISTORE_OUTBOX_ROLE, MAPISTORE_DELETEDITEMS_ROLE, MAPISTORE_CALENDAR_ROLE,
                      MAPISTORE_CONTACTS_ROLE, MAPISTORE_TASKS_ROLE, MAPISTORE_NOTES_ROLE, MAPISTORE_JOURNAL_ROLE,
@@ -203,10 +205,10 @@ for( i=0 ; i < 12 ; i++ )
 	  }
 
 	Context->url 				 		= talloc_asprintf(mem_ctx,"EasyLinux://%s",ContextRole[i]);
-	Context->name				 		= talloc_strdup(mem_ctx, ContextRole[i]);
+	Context->name				 		= talloc_strdup(mem_ctx, NameRole[i]);
 	Context->main_folder 		= true;
 	Context->role 					= Roles[i];
-	Context->tag						= talloc_strdup(mem_ctx, ContextRole[i]);
+	Context->tag						= talloc_strdup(mem_ctx, "tag");
 	Context->prev	          = ContextOld;
 	
 	if( i < 11 )
@@ -269,13 +271,12 @@ return rc;
 static enum mapistore_error ContextGetPath(void *backend_object, TALLOC_CTX *mem_ctx, uint64_t fmid, char **path)
 {
 char *Path;
-struct EasyLinuxBackendContext *elBackendContext;
+struct EasyLinuxContext *elBackendContext;
 
-elBackendContext = (struct EasyLinuxBackendContext *)backend_object;
-Path = talloc_asprintf(mem_ctx, "%s",elBackendContext->RootFolder.displayName);
-
-path = &Path;
-DEBUG(0, ("MAPIEasyLinux : ContextGetPath: /'%s' (%lX) \n",Path, fmid));
+elBackendContext = (struct EasyLinuxContext *)backend_object;
+Path = talloc_asprintf(mem_ctx, "%s",elBackendContext->RootFolder.RelPath);
+*path = (char *)Path;
+DEBUG(3, ("MAPIEasyLinux : ContextGetPath: %lX - %s\n",fmid, Path));
 return MAPISTORE_SUCCESS;
 }
 
@@ -298,16 +299,14 @@ return MAPISTORE_SUCCESS;
  */
 static enum mapistore_error ContextGetRootFolder(void *backend_object, TALLOC_CTX *mem_ctx, uint64_t fid, void **folder_object)  
 {
-int rc=MAPISTORE_SUCCESS;  // MAPISTORE_ERR_NO_DIRECTORY    MAPISTORE_SUCCESS
-struct EasyLinuxBackendContext *elBackendContext;
+struct EasyLinuxContext *elContext;
 
-elBackendContext = (struct EasyLinuxBackendContext *)backend_object;
+elContext = (struct EasyLinuxContext *)backend_object;
 
-DEBUG(0,("MAPIEasyLinux : ContextGetRootFolder (%lX) - (%s)\n",elBackendContext->RootFolder.FID, elBackendContext->RootFolder.displayName));
-*folder_object = &elBackendContext->RootFolder;
+DEBUG(3,("MAPIEasyLinux : ContextGetRootFolder %lX - %s\n",elContext->RootFolder.FID, elContext->RootFolder.displayName));
+*folder_object = &elContext->RootFolder;
 
-// DEBUG(0, ("MAPIEasyLinux : ContextGetRootFolder (%lX)\n",fid));
-return rc;
+return MAPISTORE_SUCCESS;
 }
 
 /**
@@ -332,7 +331,7 @@ return rc;
  */
 static enum mapistore_error FolderOpen(void *parent_folder, TALLOC_CTX *mem_ctx, uint64_t fid, void **childfolder_object)
 {
-int rc=MAPISTORE_SUCCESS;
+int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
 DEBUG(0, ("MAPIEasyLinux : FolderOpen\n"));
 return rc;
 }
@@ -357,13 +356,92 @@ return rc;
  * - PR_CHANGE_NUM: the new change number
  * 
  * \return MAPISTORE_SUCCESS on success, otherwise MAPISTORE_ERROR
+ 
+struct SRow {
+	uint32_t ulAdrEntryPad;
+	uint32_t cValues;							// [range(0,100000)] 
+	struct SPropValue *lpProps;		// [unique,size_is(cValues)] 
+}																// [noprint,nopush,public,nopull] ;
+
+struct SPropValue {
+	enum MAPITAGS ulPropTag;
+	uint32_t dwAlignPad;
+	union SPropValue_CTR value;		// [switch_is(ulPropTag&0xFFFF)] 
+}																// [noprint,nopush,public,nopull] ;
+
+
+
  */
 static enum mapistore_error FolderCreate(void *parent_folder, TALLOC_CTX *mem_ctx, uint64_t fid, struct SRow *aRow, void **childfolder)
 {
-int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
+int rc=MAPISTORE_ERR_NOT_IMPLEMENTED, i;
+struct EasyLinuxFolder *elFolder, *elNewFolder;
+
+elFolder = (struct EasyLinuxFolder *)parent_folder;
+elNewFolder = (struct EasyLinuxFolder *)talloc_zero_size(mem_ctx, sizeof(struct EasyLinuxFolder));
+*childfolder = (void *)elNewFolder;
+
 DEBUG(0, ("MAPIEasyLinux : FolderCreate\n"));
+// On a besoin de :
+switch( elFolder->elContext->bkType )
+  {
+  case EASYLINUX_FALLBACK:
+    //*rowCount = XmlCreateFolder(elFolder, table_type);
+    rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
+    break;
+    
+  case EASYLINUX_MAILDIR:
+    DEBUG(0, ("MAPIEasyLinux :   FID: 0x%lX\n",fid));
+    DEBUG(0, ("MAPIEasyLinux :   EntryPad: %X  Values: %i\n",aRow->ulAdrEntryPad, aRow->cValues));
+    for(i=0 ; i<aRow->cValues ; i++)
+      {
+      switch( aRow->lpProps[i].ulPropTag )
+        {
+        case 0x36010003:  // PidTagFolderType 0x36010003   -> int FOLDER_GENERIC=0x1, FOLDER_SEARCH=0x2
+          elNewFolder->FolderType = (int)aRow->lpProps[i].value.l;
+          break;
+        
+        case 0x3001001E: // PidTagDisplayName_string8 0x3001001E 
+          elNewFolder->displayName = talloc_strdup(mem_ctx,(char *)aRow->lpProps[i].value.lpszA);
+          DEBUG(0, ("MAPIEasyLinux :   DisplayName  %s\n", elNewFolder->displayName));
+          break;
+          
+        case 0x3004001E: // PidTagComment_string8 0x3004001E  
+          elNewFolder->Comment = talloc_strdup(mem_ctx,(char *)aRow->lpProps[i].value.lpszA);
+          break;
+          
+        case 0x67490014: // PidTagParentFolderId 0x67490014
+          break;
+          
+        case 0x67A40014: // PidTagChangeNumber 0x67A40014 
+          break;
+
+        default:
+          DEBUG(0, ("MAPIEasyLinux :   PropTag[%i]: 0x%X\n", i, (int)aRow->lpProps[i].ulPropTag));
+          break;
+        }
+      }
+    elNewFolder->stType=EASYLINUX_FOLDER;
+	  elNewFolder->Uri = talloc_asprintf(mem_ctx,"EasyLinux://%s",elNewFolder->displayName);
+	  elNewFolder->FID=fid;
+	  elNewFolder->RelPath  = ImapToMaildir(mem_ctx, elNewFolder->displayName);
+	  elNewFolder->FullPath = talloc_asprintf(mem_ctx, "%s%s/", elFolder->FullPath, elNewFolder->RelPath);
+	  elNewFolder->Parent   = elFolder;
+	  elNewFolder->elContext = elFolder->elContext;
+      
+    Dump(elNewFolder);
+    Dump(elFolder);
+    rc = MailDirCreateFolder(elNewFolder);
+    break;
+
+  default:
+    DEBUG(0,("ERROR: MAPIEasyLinux - %i invalid type of backend !\n", elFolder->elContext->bkType));
+    break;
+  }
+
 return rc;
 }
+
 
 /**
    \details Delete a folder in current context
@@ -398,11 +476,46 @@ static enum mapistore_error FolderGetChildCount(void *folder_object, uint32_t ta
 int rc=MAPISTORE_SUCCESS;
 struct EasyLinuxFolder *elFolder;
 
-elFolder = folder_object;
+elFolder = (struct EasyLinuxFolder *)folder_object;
+// On a besoin de :
+switch( elFolder->elContext->bkType )
+  {
+  case EASYLINUX_FALLBACK:
+    //*rowCount = GetXmlChildCount(elFolder, table_type);
+    DEBUG(0, ("MAPIEasyLinux : FolderGetChildCount for '%s' (%i)\n", elFolder->FullPath, *rowCount));
+    *rowCount = 1;
+    break;
+    
+  case EASYLINUX_MAILDIR:
+    *rowCount = GetMaildirChildCount(elFolder, table_type);
+    break;
 
-*rowCount = GetMaildirChildCount(elFolder, table_type);
+	case EASYLINUX_CALENDAR:
+	  *rowCount = GetCalendars(elFolder);
+	  break;
+	  
+	case EASYLINUX_CONTACTS:
+	  *rowCount = GetContacts(elFolder);
+	  break;
+	
+	case EASYLINUX_TASKS:
+	  *rowCount = GetTasks(elFolder);
+	  break;
+	  
+	case EASYLINUX_NOTES:
+	  *rowCount = GetNotes(elFolder);
+	  break;
+	  
+	case EASYLINUX_JOURNAL:
+	  *rowCount = GetJournal(elFolder);
+	  break;
 
-DEBUG(0, ("MAPIEasyLinux : FolderGetChildCount for '%s' (%i)\n", elFolder->displayName, *rowCount));
+  default:
+    DEBUG(0,("ERROR: MAPIEasyLinux - FolderGetChildCount %i invalid type of backend !\n", elFolder->elContext->bkType));
+    break;
+  }
+
+
 return rc;
 }
 
@@ -486,13 +599,12 @@ elMessage = (struct EasyLinuxMessage *)talloc_zero_size(mem_ctx, sizeof(struct E
 elMessage->stType = EASYLINUX_MSG;
 elMessage->MID = mid;
 elMessage->associated = associated;
-//elMessage->displayName = ;
 elMessage->parent_folder = elFolder;
 elMessage->elContext = elFolder->elContext;
 
 *message_object = (void *)elMessage;
 
-DEBUG(0, ("MAPIEasyLinux : FolderCreateMessage\n"));
+DEBUG(0, ("MAPIEasyLinux : FolderCreateMessage - MID: 0x%0lX\n", mid));
 return rc;
 }
 
@@ -603,16 +715,15 @@ struct EasyLinuxTable  *elTable;
 struct EasyLinuxFolder *elFolder;
 
 elFolder = (struct EasyLinuxFolder *)folder_object;
-//elTable = talloc_zero_size(mem_ctx, sizeof(struct EasyLinuxTable));
-elTable = &elFolder->elContext->Table;
+elTable = talloc_zero_size(mem_ctx, sizeof(struct EasyLinuxTable));
 
 if( elTable == NULL )
   {
   DEBUG(0,("ERROR: MAPIEasyLinux - Cannot allocate memory for table\n"));
   return MAPISTORE_ERROR;
   }
-//*table_object = (void *)elTable;
-*table_object = (void *)elFolder;
+
+*table_object = (void *)elTable;
 
 tType = (uint8_t)table_type;
 switch( tType )
@@ -633,15 +744,18 @@ switch( tType )
 
 elTable->stType        = EASYLINUX_TABLE;
 elTable->rowCount      = 0;
-elTable->IdTable       = handle_id;
+elTable->IdTable       = handle_id;  // Sogo specific
 elTable->tType         = tType;
+// Link Table and Folder together
 elTable->parent_folder = folder_object;
+elFolder->Table = elTable;    
+
 elTable->elContext     = elFolder->elContext;
 *row_count             = 0;
 
 DEBUG(0, ("MAPIEasyLinux : FolderCreateTable - Creer table\n"));
-DEBUG(0, ("MAPIEasyLinux :       Parent :%s\n",elFolder->displayName));
-DEBUG(0, ("MAPIEasyLinux :       Table:%s  Type: %s  Id Table: %i\n",elFolder->displayName, sType, handle_id));
+DEBUG(0, ("MAPIEasyLinux :       Parent :%s\n",elFolder->RelPath));
+DEBUG(0, ("MAPIEasyLinux :       Type: %s  Id Table: %i\n",sType, handle_id));
 
 talloc_unlink(mem_ctx, sType);
 return rc;
@@ -783,8 +897,21 @@ return rc;
 static enum mapistore_error MessageSave (void *message_object, TALLOC_CTX *mem_ctx)
 {
 int rc=MAPISTORE_SUCCESS;
+struct EasyLinuxMessage *elMessage;
+
+elMessage = message_object;
 // On a besoin de :
-SaveMessageXml(message_object, mem_ctx);
+switch( elMessage->elContext->bkType )
+  {
+  case EASYLINUX_FALLBACK:
+    SaveMessageXml(elMessage, mem_ctx);
+    break;
+    
+  default:
+    DEBUG(0,("ERROR: MAPIEasyLinux - %i invalid type of backend !\n", elMessage->elContext->bkType));
+    break;
+  }
+    
 
 
 DEBUG(0, ("MAPIEasyLinux : MessageSave\n"));
@@ -871,9 +998,20 @@ This function sets the columns we want to retrieve when querying for table objec
 */
 static enum mapistore_error TableSetColumns (void *table_object, uint16_t count, enum MAPITAGS *properties)
 {
-int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("MAPIEasyLinux : TableSetColumns\n"));
-return rc;
+int i;
+struct EasyLinuxTable *elTable;
+
+elTable = table_object;
+elTable->MapiTagCount = count;
+elTable->MapiTag = (int *)talloc_zero_size(elTable->elContext->mem_ctx, sizeof(int) * count);
+
+for( i=0 ; i<count ; i++)
+  {
+  elTable->MapiTag[i] = properties[i];
+  DEBUG(0, ("MAPIEasyLinux : TableSetColumns Count: %i Propertie: 0x%X\n", count, (int)properties[i]));
+  }
+
+return MAPISTORE_SUCCESS;
 }
 
 /*
@@ -897,7 +1035,7 @@ return rc;
 static enum mapistore_error TableSetRestrictions (void *table_object, struct mapi_SRestriction *restrictions, uint8_t *table_status)
 {
 int rc=MAPISTORE_SUCCESS;
-char     *sRes, *sMsg;
+char     *sRes, *sMsg, *sFilter;
 TALLOC_CTX *mem_ctx;
 struct EasyLinuxTable *elTable;
 
@@ -918,14 +1056,26 @@ switch(restrictions->rt)
   case RES_PROPERTY:
     sRes = talloc_strdup(mem_ctx, "RES_PROPERTY");
     sMsg = talloc_asprintf(mem_ctx,"relop:%X - ulPropTag: %X",restrictions->res.resProperty.relop,restrictions->res.resProperty.ulPropTag);
-    //PidTagSubject=(int)(0x0037001F)
-    /*
-    struct mapi_SPropertyRestriction {
-	uint8_t relop;
-	enum MAPITAGS ulPropTag; // int
-	struct mapi_SPropValue lpProp;
-} [flag(LIBNDR_FLAG_NOALIGN)] 
-    */
+    // relop 4 => EQUAL
+    
+    switch( restrictions->res.resProperty.ulPropTag )
+      {
+      case 0x0037001F:  // PidTagSubject 0x0037001F 
+        DEBUG(0,("MAPIEasyLinux : TableSetRestrictions: Subject=%s\n", (char *)restrictions->res.resProperty.lpProp.value.lpszA ));
+        sFilter = talloc_asprintf(mem_ctx,"Subject=%s",(char *)restrictions->res.resProperty.lpProp.value.lpszA);
+        elTable->Filter = sFilter;
+        break;
+        
+      case 0x3001001F:  // PidTagDisplayName  0x3001001F
+        DEBUG(0,("MAPIEasyLinux : TableSetRestrictions: DisplayName=%s\n", (char *)restrictions->res.resProperty.lpProp.value.lpszA ));
+        sFilter = talloc_asprintf(mem_ctx,"DisplayName=%s",(char *)restrictions->res.resProperty.lpProp.value.lpszA);
+        elTable->Filter = sFilter;
+        break;
+            
+      default:
+        DEBUG(0,("MAPIEasyLinux : TableSetRestrictions: Table RES_PROPERTY 0x%X\n",restrictions->res.resProperty.ulPropTag));
+        break;
+      }
     break;
   case RES_COMPAREPROPS:
     sRes = talloc_strdup(mem_ctx, "RES_COMPAREPROPS");
@@ -941,11 +1091,12 @@ switch(restrictions->rt)
     break;
   default:
     sRes = talloc_strdup(mem_ctx, "Inconnu");
+    DEBUG(0, ("MAPIEasyLinux : TableSetRestrictions (rt: %i) Type: %s \n",restrictions->rt, sRes));
     break;
   }
  	
 *table_status = TBLSTAT_COMPLETE;
-DEBUG(0, ("MAPIEasyLinux : TableSetRestrictions (rt: %i) Type: %s Msg: %s\n",restrictions->rt, sRes, sMsg));
+
 
 talloc_unlink(mem_ctx, sRes);
 talloc_unlink(mem_ctx, sMsg);
@@ -975,29 +1126,40 @@ The function takes in parameters:
     void *table_object: the table object to retrieve the row from
     TALLOC_CTX : the memory context to user to allocate data to return
     enum table_query_type query_type: defines on which view the query occurs:
-        MAPISTORE_PREFILTERED_QUERY: has the table already been filtered using set_restrictions or set_sort_order etc. In this case, return the row in this filtered view
-        MAPISTORE_LIVEFILTERED_QUERY: only setcolumns was applied, return rows directly from the raw table results.
+        MAPISTORE_PREFILTERED_QUERY: has the table already been filtered using 
+            set_restrictions or set_sort_order etc. In this case, return the row 
+            in this filtered view
+        MAPISTORE_LIVEFILTERED_QUERY: only setcolumns was applied, return rows 
+            directly from the raw table results.
     uint32_t row_id: the index of the row to fetch within the table
     struct mapistore_property_data **data: the set of data for the row to return
 
-mapistore_property_data is an abstracted way to return data. When OpenChange returns data to a client, it sends them within a DATA_BLOB where values (matching requested properties) are packed one to next,
-sometimes prefixed by an error value to let the client know it didn't found the value or accessing the value was forbidden.
+mapistore_property_data is an abstracted way to return data. When OpenChange returns 
+data to a client, it sends them within a DATA_BLOB where values (matching requested 
+properties) are packed one to next,
+sometimes prefixed by an error value to let the client know it didn't found the value 
+or accessing the value was forbidden.
 
 struct mapistore_property_data {
         void *data;
         int error;
 };
 
-This mapistore_property_data is just a data structure backends use to fill information. They put the value matching a property in void *data.
-This is used to pass any kind of data back. If the value was found, set error to MAPISTORE_SUCCESS. If an error occurs, set data to NULL and set the error to MAPISTORE_ERR_NOT_FOUND or MAPI_E_NO_ACCESS depending on the status.
+This mapistore_property_data is just a data structure backends use to fill information. 
+They put the value matching a property in void *data.
+This is used to pass any kind of data back. If the value was found, set error to 
+MAPISTORE_SUCCESS. If an error occurs, set data to NULL and set the error to 
+MAPISTORE_ERR_NOT_FOUND or MAPI_E_NO_ACCESS depending on the status.
 */
 static enum mapistore_error TableGetRow (void *table_object, TALLOC_CTX *mem_ctx,
                     enum mapistore_query_type query_type, uint32_t row_id,
                     struct mapistore_property_data **data)
 {
-int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
+//if( query_type == MAPISTORE_PREFILTERED_QUERY )
+//if( query_type == MAPISTORE_LIVEFILTERED_QUERY )
+
 DEBUG(0, ("MAPIEasyLinux : TableGetRow\n"));
-return rc;
+return MAPISTORE_ERR_NOT_FOUND;
 }
 
 /*
@@ -1024,11 +1186,11 @@ struct EasyLinuxTable *elTable;
 
 elTable = table_object;
 if( query_type == MAPISTORE_PREFILTERED_QUERY )
-  *row_countp = 0;
+  *row_countp = elTable->rowCount;
 if( query_type == MAPISTORE_LIVEFILTERED_QUERY )
-  *row_countp = 0;
+  *row_countp = elTable->rowCount;
   
-DEBUG(0, ("MAPIEasyLinux : TableGetRowCount %i Folder: \n", query_type));
+DEBUG(0, ("MAPIEasyLinux : TableGetRowCount %i \n", query_type));
 return rc;
 }
 
@@ -1136,7 +1298,7 @@ The function takes in parameter:
 struct SPropValue {
 	enum MAPITAGS ulPropTag;  // en HEX
 	uint32_t dwAlignPad;
-	union SPropValue_CTR value; // [switch_is(ulPropTag&0xFFFF)] 
+	union SPropValue_CTR value; // [switch_is(ulPropTag&0xFFFF)]  - PROP_VAL_UNION
 } // [noprint,nopush,public,nopull] 
 
 struct SRow {
@@ -1144,6 +1306,30 @@ struct SRow {
 	uint32_t cValues; // [range(0,100000)] 
 	struct SPropValue *lpProps; // [unique,size_is(cValues)] 
 }// [noprint,nopush,public,nopull] 
+
+union PROP_VAL_UNION {
+	uint16_t i;										// [case(0x0002)] 
+	uint32_t l;										// [case(0x0003)] 
+	uint8_t b;										// [case(0x000b)] 
+	const char *lpszA;						// [unique,charset(DOS),case(0x001e)] 
+	const char *lpszW;						// [unique,charset(UTF16),case(0x001f)] 
+	struct Binary_r bin;					// [case(0x0102)] 
+	struct FlatUID_r *lpguid;			// [unique,case(0x0048)] 
+	struct FILETIME ft;						// [case(0x0040)] 
+	enum MAPISTATUS err;					// [case(0x000a)] 
+	struct ShortArray_r MVi;			// [case(0x1002)] 
+	struct LongArray_r MVl;				// [case(0x1003)] 
+	struct StringArray_r MVszA;		// [case(0x101e)] 
+	struct BinaryArray_r MVbin;		// [case(0x1102)] 
+	struct FlatUIDArray_r MVguid;	// [case(0x1048)] 
+	struct StringArrayW_r MVszW;	// [case(0x101f)] 
+	struct DateTimeArray_r MVft;	// [case(0x1040)] 
+	uint32_t null;								// [case(0x0001)] 
+};															// [switch_type(uint32)] 
+
+
+
+
 */
 static enum mapistore_error PropertiesSetProperties (void *object, struct SRow *aRow)
 {
@@ -1152,66 +1338,76 @@ struct EasyLinuxGeneric *elGeneric;
 struct EasyLinuxFolder  *elFolder;
 struct EasyLinuxMessage *elMessage;
 struct EasyLinuxTable   *elTable;
+TALLOC_CTX *MemCtx;
+uint32_t		TheProp;
+char *sstType;
+int i;
 
 elGeneric = (struct EasyLinuxGeneric *)object;
 switch( elGeneric->stType )
   {
   case EASYLINUX_FOLDER:
     elFolder = (struct EasyLinuxFolder *)object;
+    MemCtx = elFolder->elContext->mem_ctx;
+    sstType = talloc_strdup(MemCtx,"Folder");
     break;
   case EASYLINUX_MSG:
     elMessage = (struct EasyLinuxMessage *)object;
+    MemCtx = elMessage->elContext->mem_ctx;
+    sstType = talloc_strdup(MemCtx,"Message");
     break;
   case EASYLINUX_TABLE:
     elTable = (struct EasyLinuxTable *)object;
+    MemCtx = elTable->elContext->mem_ctx;
+    sstType = talloc_strdup(MemCtx,"Table");
     break;
   default:
     DEBUG(0,("ERROR: MAPIEasyLinux - Unknown object type (%i)\n",elGeneric->stType));
     break;
   }
 
+DEBUG(0,("MAPIEasyLinux : SetProperties Concerne: %s ulEntryPad: %X\n", sstType, aRow->ulAdrEntryPad));
+DEBUG(0,("MAPIEasyLinux : time_t est %lu\n", sizeof(time_t)));
+
+for(i=0 ; i<aRow->cValues ; i++)
+  {
+  TheProp = aRow->lpProps[i].ulPropTag;
+  DEBUG(0,("MAPIEasyLinux :   Tag: 0x%08X  Tag: 0x%08X  Type: 0x%08X Align: %i\n",TheProp, TheProp & 0xFFFF0000, TheProp & 0x0000FFFF, aRow->lpProps[i].dwAlignPad));
+  // 0xFFFF0000   -> Get property
+  // 0x0000FFFF   -> Get value type (string, uint, ...)
+  
+  // 	PidTagDisplayName=(int)(0x3001001F),
+  
+  
+  
+  }
+
+/*
+
+
+
+
 
 
 switch(aRow->lpProps->ulPropTag)
   {
   case 0x3001001F: // PidTagDisplayName (0x3001001F) PT_STRING8, PT_UNICODE
-    /*
-    Folders require sibling subfolders to have unique display names. For example, if a folder 
-    contains two subfolders, the two subfolders cannot use the same value for this property. This 
-    restriction does not apply to other containers, such as address books and distribution lists.
-
-Service providers should set the value of this property so that it contains both the provider 
-type and configuration information. The additional information helps to distinguish between 
-instances of providers of the same type. Unconfigured providers should use a string that names 
-the provider. Configured providers should use the same string followed by a distinguishing 
-string in parentheses. For example, an unconfigured message store provider might set these properties to:
-
-Personal Information Store
-
-The configured version could then set these properties to:
-
-Personal Information Store (February 6, 1998)
-
-For status objects, these properties contain the name of the component that can be displayed by the user interface. 
-    */
-    DEBUG(0, ("MAPIEasyLinux : SetProperties  ulAdrEntryPad: %i  cValues: %i  SetPidTagDisplay(0x%X)  Value :'%s'  stType: %i\n",
-                                   aRow->ulAdrEntryPad, aRow->cValues, 
-                                   aRow->lpProps->ulPropTag, aRow->lpProps->value.lpszA, elGeneric->stType));
+    DEBUG(0, ("MAPIEasyLinux : SetPidTagDisplay: %s - Type: %i (%s)\n", aRow->lpProps->value.lpszA, elGeneric->stType, sstType));                             
     break;
     
-  //case 0x371A001F: 		// PidTagAttachPayloadClass  (0x371A001F)
   //case 0x1A001F:  		// PidTagIsdnNumber          (0x3A2D001F),
   case 0x1A001F:      // PidTagMessageClass        (0x1A001F)  PT_UNICODE, PT_STRING8
     // Concern Message object only
     elMessage->MessageClass = talloc_strdup(elMessage->elContext->mem_ctx, aRow->lpProps->value.lpszA);
-    DEBUG(0, ("MAPIEasyLinux :  PidTagMessageClass :'%s'\n",aRow->lpProps->value.lpszA));
+    DEBUG(0, ("MAPIEasyLinux : PidTagMessageClass :'%s' (%s)\n",aRow->lpProps->value.lpszA, sstType));
     break;
 
   default:
-    DEBUG(0, ("MAPIEasyLinux : SetProperties Row(%i - %i) Prop(0x%X, %i) stType: %i\n",aRow->ulAdrEntryPad, aRow->cValues, aRow->lpProps->ulPropTag,
-               aRow->lpProps->dwAlignPad, elGeneric->stType));
+    DEBUG(0, ("MAPIEasyLinux : SetProperties Row(%i - %i) Prop(0x%0X, %i) stType: %i (%s)\n",aRow->ulAdrEntryPad, aRow->cValues, aRow->lpProps->ulPropTag,
+               aRow->lpProps->dwAlignPad, elGeneric->stType, sstType));
   }
-  
+*/
+talloc_unlink(MemCtx,sstType);  
 return rc;
 }
 
@@ -1260,13 +1456,13 @@ else
   backend.backend.name 												= "EasyLinux";
   backend.backend.description 								= "MAPIStore EasyLinux backend";
   backend.backend.namespace 									= "EasyLinux://";
-  backend.backend.init 												= BackendInit;
-  backend.backend.create_context 							= BackendCreateContext;
+  backend.backend.init 												= BackendInit;											// Ok
+  backend.backend.create_context 							= BackendCreateContext;							// Ok
   backend.backend.create_root_folder 					= BackendCreateRootFolder;
-  backend.backend.list_contexts 							= BackendListContexts;
+  backend.backend.list_contexts 							= BackendListContexts;							// OK
   // Context
-  backend.context.get_path 										= ContextGetPath;
-  backend.context.get_root_folder 						= ContextGetRootFolder;
+  backend.context.get_path 										= ContextGetPath;										// Ok
+  backend.context.get_root_folder 						= ContextGetRootFolder;							// Ok
   // Folder
   backend.folder.open_folder 									= FolderOpen;
   backend.folder.create_folder 								= FolderCreate;
