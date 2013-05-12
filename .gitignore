@@ -1,6 +1,7 @@
 aclocal.m4
 *.o
 *.po
+*.xpo
 *.so.*
 *.so
 *~

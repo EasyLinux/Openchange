@@ -599,7 +599,7 @@ elMessage = (struct EasyLinuxMessage *)talloc_zero_size(mem_ctx, sizeof(struct E
 elMessage->stType = EASYLINUX_MSG;
 elMessage->MID = mid;
 elMessage->associated = associated;
-elMessage->parent_folder = elFolder;
+elMessage->Parent = elFolder;
 elMessage->elContext = elFolder->elContext;
 
 *message_object = (void *)elMessage;
@@ -709,55 +709,29 @@ static enum mapistore_error FolderCreateTable(void *folder_object, TALLOC_CTX *m
                        void **table_object, uint32_t *row_count)
 {
 int rc=MAPISTORE_SUCCESS;
-uint8_t  tType;
-char     *sType;
-struct EasyLinuxTable  *elTable;
 struct EasyLinuxFolder *elFolder;
 
 elFolder = (struct EasyLinuxFolder *)folder_object;
-elTable = talloc_zero_size(mem_ctx, sizeof(struct EasyLinuxTable));
+elFolder->Table = talloc_zero_size(mem_ctx, sizeof(struct EasyLinuxTable));
 
-if( elTable == NULL )
+if( elFolder->Table == NULL )
   {
   DEBUG(0,("ERROR: MAPIEasyLinux - Cannot allocate memory for table\n"));
   return MAPISTORE_ERROR;
   }
 
-*table_object = (void *)elTable;
+*table_object = (void *)elFolder->Table;
 
-tType = (uint8_t)table_type;
-switch( tType )
-  {
-  case 2:   // MAPISTORE_MESSAGE_TABLE
-    sType = talloc_strdup(mem_ctx, "MESSAGE_TABLE");
-    break;
-  case 3:   // MAPISTORE_FAI_TABLE
-    sType = talloc_strdup(mem_ctx, "FAI_TABLE");
-    break;
-  case 1:   // MAPISTORE_FOLDER_TABLE
-    sType = talloc_strdup(mem_ctx, "FOLDER_TABLE");
-    break;
-  default:  // Unknown
-    sType = talloc_strdup(mem_ctx, "UNKNOW_TABLE");
-    break;
-  }  
-
-elTable->stType        = EASYLINUX_TABLE;
-elTable->rowCount      = 0;
-elTable->IdTable       = handle_id;  // Sogo specific
-elTable->tType         = tType;
+elFolder->Table->stType        = EASYLINUX_TABLE;
+elFolder->Table->rowCount      = 0;
+// elTable->IdTable       = handle_id;  // Sogo specific
+elFolder->Table->tType         = table_type;
 // Link Table and Folder together
-elTable->parent_folder = folder_object;
-elFolder->Table = elTable;    
-
-elTable->elContext     = elFolder->elContext;
-*row_count             = 0;
+elFolder->Table->elParent = (void *)folder_object;
+elFolder->Table->elContext     = elFolder->elContext;
+*row_count             = elFolder->Table->rowCount;
 
 DEBUG(0, ("MAPIEasyLinux : FolderCreateTable - Creer table\n"));
-DEBUG(0, ("MAPIEasyLinux :       Parent :%s\n",elFolder->RelPath));
-DEBUG(0, ("MAPIEasyLinux :       Type: %s  Id Table: %i\n",sType, handle_id));
-
-talloc_unlink(mem_ctx, sType);
 return rc;
 }
 
@@ -998,20 +972,10 @@ This function sets the columns we want to retrieve when querying for table objec
 */
 static enum mapistore_error TableSetColumns (void *table_object, uint16_t count, enum MAPITAGS *properties)
 {
-int i;
-struct EasyLinuxTable *elTable;
+//struct EasyLinuxTable *elTable;
 
-elTable = table_object;
-elTable->MapiTagCount = count;
-elTable->MapiTag = (int *)talloc_zero_size(elTable->elContext->mem_ctx, sizeof(int) * count);
 
-for( i=0 ; i<count ; i++)
-  {
-  elTable->MapiTag[i] = properties[i];
-  DEBUG(0, ("MAPIEasyLinux : TableSetColumns Count: %i Propertie: 0x%X\n", count, (int)properties[i]));
-  }
-
-return MAPISTORE_SUCCESS;
+return MAPISTORE_ERR_NOT_IMPLEMENTED;
 }
 
 /*
@@ -1034,11 +998,11 @@ return MAPISTORE_SUCCESS;
  */
 static enum mapistore_error TableSetRestrictions (void *table_object, struct mapi_SRestriction *restrictions, uint8_t *table_status)
 {
-int rc=MAPISTORE_SUCCESS;
+int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
 char     *sRes, *sMsg, *sFilter;
 TALLOC_CTX *mem_ctx;
 struct EasyLinuxTable *elTable;
-
+/*
 elTable = (struct EasyLinuxTable *)table_object;
 mem_ctx= elTable->elContext->mem_ctx;
 
@@ -1100,6 +1064,8 @@ switch(restrictions->rt)
 
 talloc_unlink(mem_ctx, sRes);
 talloc_unlink(mem_ctx, sMsg);
+*/
+DEBUG(0, ("MAPIEasyLinux : TableSetRestrictions (rt: %i)\n",restrictions->rt));
 return rc;
 }
 
@@ -1271,30 +1237,6 @@ The function takes in parameter:
     struct SRow *aRow: pointer on a SRow structure holding properties to apply
     
     
-    union SPropValue_CTR {
-	uint16_t i;/ [case(0x0002)] 
-	uint32_t l;/ [case(0x0003)] 
-	double dbl;/ [case(0x0005)] 
-	uint8_t b;/ [case(0x000b)] 
-	int64_t d;/ [case(0x0014)] 
-	const char *lpszA;/ [unique,charset(DOS),case(0x001e)] 
-	struct Binary_r bin;/ [case(0x0102)] 
-	const char *lpszW;/ [unique,charset(UTF16),case(0x001f)] 
-	struct FlatUID_r *lpguid;/ [unique,case(0x0048)] 
-	struct FILETIME ft;/ [case(0x0040)] 
-	enum MAPISTATUS err;/ [case(0x000a)] 
-	struct ShortArray_r MVi;/ [case(0x1002)] 
-	struct LongArray_r MVl;/ [case(0x1003)] 
-	struct UI8Array_r MVui8;/ [case(0x1014)] 
-	struct StringArray_r MVszA;/ [case(0x101e)] 
-	struct BinaryArray_r MVbin;/ [case(0x1102)] 
-	struct FlatUIDArray_r MVguid;/ [case(0x1048)] 
-	struct StringArrayW_r MVszW;/ [case(0x101f)] 
-	struct DateTimeArray_r MVft;/ [case(0x1040)] 
-	uint32_t null;/ [case(0x0001)] 
-	uint32_t object;/ [case(0x000d)] 
-}  // [noprint,nopull,nopush,switch_type(uint32)] 
-
 struct SPropValue {
 	enum MAPITAGS ulPropTag;  // en HEX
 	uint32_t dwAlignPad;
@@ -1339,20 +1281,26 @@ struct EasyLinuxFolder  *elFolder;
 struct EasyLinuxMessage *elMessage;
 struct EasyLinuxTable   *elTable;
 TALLOC_CTX *MemCtx;
-uint32_t		TheProp;
 char *sstType;
 int i;
 
+// We need to know of wich object Properties belong to
 elGeneric = (struct EasyLinuxGeneric *)object;
 switch( elGeneric->stType )
   {
   case EASYLINUX_FOLDER:
     elFolder = (struct EasyLinuxFolder *)object;
+    if( elFolder->Table == NULL )
+      elFolder->Table = (struct EasyLinuxTable *)talloc_zero_size(elFolder->elContext->mem_ctx, sizeof(struct EasyLinuxTable));
+    elTable = elFolder->Table;  
     MemCtx = elFolder->elContext->mem_ctx;
     sstType = talloc_strdup(MemCtx,"Folder");
     break;
   case EASYLINUX_MSG:
     elMessage = (struct EasyLinuxMessage *)object;
+    if( elMessage->Table == NULL )
+      elMessage->Table = (struct EasyLinuxTable *)talloc_zero_size(elMessage->elContext->mem_ctx, sizeof(struct EasyLinuxTable));
+    elTable = elMessage->Table;  
     MemCtx = elMessage->elContext->mem_ctx;
     sstType = talloc_strdup(MemCtx,"Message");
     break;
@@ -1366,51 +1314,20 @@ switch( elGeneric->stType )
     break;
   }
 
-DEBUG(0,("MAPIEasyLinux : SetProperties Concerne: %s ulEntryPad: %X\n", sstType, aRow->ulAdrEntryPad));
-DEBUG(0,("MAPIEasyLinux : time_t est %lu\n", sizeof(time_t)));
+DEBUG(0,("MAPIEasyLinux : SetProperties is about: %s\n", sstType));
 
+// Store Properties
 for(i=0 ; i<aRow->cValues ; i++)
-  {
-  TheProp = aRow->lpProps[i].ulPropTag;
-  DEBUG(0,("MAPIEasyLinux :   Tag: 0x%08X  Tag: 0x%08X  Type: 0x%08X Align: %i\n",TheProp, TheProp & 0xFFFF0000, TheProp & 0x0000FFFF, aRow->lpProps[i].dwAlignPad));
-  // 0xFFFF0000   -> Get property
-  // 0x0000FFFF   -> Get value type (string, uint, ...)
-  
-  // 	PidTagDisplayName=(int)(0x3001001F),
-  
-  
-  
-  }
+  StorePropertie(elTable, aRow->lpProps[i]);
 
-/*
-
-
-
-
-
-
-switch(aRow->lpProps->ulPropTag)
-  {
-  case 0x3001001F: // PidTagDisplayName (0x3001001F) PT_STRING8, PT_UNICODE
-    DEBUG(0, ("MAPIEasyLinux : SetPidTagDisplay: %s - Type: %i (%s)\n", aRow->lpProps->value.lpszA, elGeneric->stType, sstType));                             
-    break;
-    
-  //case 0x1A001F:  		// PidTagIsdnNumber          (0x3A2D001F),
-  case 0x1A001F:      // PidTagMessageClass        (0x1A001F)  PT_UNICODE, PT_STRING8
-    // Concern Message object only
-    elMessage->MessageClass = talloc_strdup(elMessage->elContext->mem_ctx, aRow->lpProps->value.lpszA);
-    DEBUG(0, ("MAPIEasyLinux : PidTagMessageClass :'%s' (%s)\n",aRow->lpProps->value.lpszA, sstType));
-    break;
-
-  default:
-    DEBUG(0, ("MAPIEasyLinux : SetProperties Row(%i - %i) Prop(0x%0X, %i) stType: %i (%s)\n",aRow->ulAdrEntryPad, aRow->cValues, aRow->lpProps->ulPropTag,
-               aRow->lpProps->dwAlignPad, elGeneric->stType, sstType));
-  }
-*/
 talloc_unlink(MemCtx,sstType);  
 return rc;
 }
 
+
+/*
+ *
+ */
 static enum mapistore_error ManagerGenerateUri (TALLOC_CTX *mem_ctx, 
                            const char *user, 
                            const char *folder, 

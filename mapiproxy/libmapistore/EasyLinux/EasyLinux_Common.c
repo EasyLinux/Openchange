@@ -48,6 +48,7 @@
 #define NO		0
 #define BOOL	unsigned int
 
+
 enum EasyLinux_Backend_Type GetBkType(char *sBackend)
 {
 int Return;
@@ -144,3 +145,107 @@ chown(d, elContext->User.uidNumber, elContext->User.gidNumber);
 return MAPISTORE_SUCCESS;
 }
 
+/*
+ *
+struct SPropValue {
+	enum MAPITAGS ulPropTag;  // en HEX
+	uint32_t dwAlignPad;
+	union SPropValue_CTR value; // [switch_is(ulPropTag&0xFFFF)]  - PROP_VAL_UNION
+} // [noprint,nopush,public,nopull] 
+
+#define PT_UNSPECIFIED		0x0000	// ((ULONG)  0) (Reserved for interface use) type doesn't matter to caller 
+#define PT_NULL						0x0001	// ((ULONG)  1) NULL property value 
+#define	PT_I2							0x0002	// ((ULONG)  2) Signed 16-bit value 
+#define PT_LONG						0x0003	// ((ULONG)  3) Signed 32-bit value 
+#define	PT_R4							0X0004	// ((ULONG)  4) 4-byte floating point 
+#define PT_DOUBLE					0x0005	// ((ULONG)  5) Floating point double 
+#define PT_CURRENCY				0x0006	// ((ULONG)  6) Signed 64-bit int (decimal w/	4 digits right of decimal pt) 
+#define	PT_APPTIME				0x0007	// ((ULONG)  7) Application time 
+#define PT_ERROR					0x000A	// ((ULONG) 10) 32-bit error value 
+#define PT_BOOLEAN				0x000B	// ((ULONG) 11) 16-bit boolean (non-zero true) 
+#define PT_OBJECT					0x000D	// ((ULONG) 13) Embedded object in a property 
+#define	PT_I8							0x0014	// ((ULONG) 20) 8-byte signed integer 
+#define PT_STRING8				0x001E  // ((ULONG) 30) terminated Unicode string 
+#define PT_UNICODE			  0x001F	// ((ULONG) 31) Null terminated Unicode string 
+#define PT_SYSTIME				0x0040	// ((ULONG) 64) FILETIME 64-bit int w/ number of 100ns periods since Jan 1,1601 
+#define	PT_CLSID					0x0048	// ((ULONG) 72) OLE GUID 
+#define PT_BINARY					0x0102	// ((ULONG) 258) Uninterpreted (counted byte array) 
+
+struct EasyLinuxProp {
+	uint32_t												PropTag;
+	int															PropType;
+	void														*PropValue;
+	};	
+ 
+ */
+void StorePropertie(struct EasyLinuxTable *Table, struct SPropValue Prop)
+{
+struct EasyLinuxProp *elProp;
+struct EasyLinuxProp **NewProps, **OldProps;
+int i;
+
+// Table contains a dynamic table, we need to add one element
+OldProps = Table->Props;
+// Reserve room for pointers
+*NewProps = (struct EasyLinuxProp *)talloc_zero_size(Table->elContext->mem_ctx, sizeof(struct EasyLinuxProp) * (Table->rowCount +1) );
+for( i=0 ; i< Table->rowCount ; i++)
+  NewProps[i] = OldProps[i];
+Table->Props = NewProps;
+Table->rowCount++;
+talloc_unlink(Table->elContext->mem_ctx,OldProps);
+
+// NewProps[i] is the new allocated Prop structure
+
+DEBUG(0,("MAPIEasyLinux :      %i num Properties \n", Table->rowCount));
+
+switch( Prop.ulPropTag & 0x0000FFFF )
+  {
+  case PT_UNICODE:
+    DEBUG(0,("MAPIEasyLinux :      0x%08X: %s\n", Prop.ulPropTag, (char *)Prop.value.lpszA));
+    break;
+    
+  case PT_I8:
+    DEBUG(0,("MAPIEasyLinux :      0x%08X: %i\n", Prop.ulPropTag, (int8_t)Prop.value.l));
+    break;
+  
+  default:
+    DEBUG(0,("MAPIEasyLinux :      0x%08X: Need to be taken\n", Prop.ulPropTag));
+    break;
+  }
+ 
+
+
+
+
+/*
+switch( Prop.ulPropTag & 0xFFFF0000 )
+  {
+  case 0x30010000:  // PidTagDisplayName  0x3001001F 
+    DEBUG(0,("MAPIEasyLinux :      PidTagDisplayName: %s\n",(char *)Prop.value.lpszA));
+    break;
+    
+  case 0x67490000:  // PidTagParentFolderId  0x67490014  
+    DEBUG(0,("MAPIEasyLinux :      PidTagParentFolderId: %lX\n",(uint64_t *)Prop.value.l));
+    break;
+    
+  case 0x67A40000:  // PidTagChangeNumber  0x67A40014  
+    DEBUG(0,("MAPIEasyLinux :      PidTagChangeNumber: %08X\n",(uint32_t )Prop.value.l));
+    break;
+    
+  case 0x001A0000:  // PidTagMessageClass 0x001A001F
+    DEBUG(0,("MAPIEasyLinux :      PidTagMessageClass: %s\n",(char *)Prop.value.lpszA));
+    break;
+    
+  case 0x003D0000:  // PidTagSubjectPrefix 0x003D001F
+    DEBUG(0,("MAPIEasyLinux :      PidTagSubjectPrefix: %s\n",(char *)Prop.value.lpszA));
+    break;
+    
+  case 0x0E1D0000:  // PidTagNormalizedSubject 0x0E1D001F
+    DEBUG(0,("MAPIEasyLinux :      PidTagNormalizedSubject: %s\n",(char *)Prop.value.lpszA));
+    break;
+        
+  default:
+    DEBUG(0,("MAPIEasyLinux :      HexTag: 0x%08X\n",Prop.ulPropTag));
+    break;
+  } */
+}

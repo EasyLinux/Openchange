@@ -48,9 +48,7 @@ struct EasyLinuxMessage {
   enum EasyLinux_Struct_Type			stType;
 	uint64_t												MID;
 	uint8_t 												associated;
-	char 														*displayName;
-	char														*MessageClass;
-	struct EasyLinuxFolder					*parent_folder;
+	struct EasyLinuxFolder					*Parent;
 	struct EasyLinuxTable           *Table;
 	struct EasyLinuxContext         *elContext;
 	};
@@ -67,12 +65,20 @@ struct EasyLinuxMessage {
 	  
 struct EasyLinuxTable {
   enum EasyLinux_Struct_Type			stType;
+  enum mapistore_table_type 			tType;
 	void                  					*elParent;
 	struct EasyLinuxContext         *elContext;
 	uint32_t												rowCount;
-	struct EasyLinuxProp						*Props;
+	struct EasyLinuxProp						**Props;
 	};
 	
+/*
+ * Prop represent a property
+ *   
+ * PropTag 				is the int32 tag (define type of value ex: PidTagDisplayName)
+ * PropType 			define type of value (int, long, char *), see union PROP_VAL_UNION in exchange.h
+ * PropValue      point to the value
+ */	
 struct EasyLinuxProp {
 	uint32_t												PropTag;
 	int															PropType;
@@ -117,6 +123,7 @@ int mapistore_init_backend(void);
 enum EasyLinux_Backend_Type GetBkType(char *);
 int RecursiveMkDir(struct EasyLinuxContext *, char *, mode_t);
 void Dump(void *);
+void StorePropertie(struct EasyLinuxTable *, struct SPropValue);
   	
 /*
  * EasyLinux_Ldap functions
