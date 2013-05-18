@@ -50,7 +50,7 @@
 
 int SetUserInformation(struct EasyLinuxContext *elContext, TALLOC_CTX *mem_ctx, char *User, struct ldb_context *ldb)
 {
-DEBUG(3, ("MAPIEasyLinux : Searching for user(%s) data's\n",User));
+DEBUG(0, ("MAPIEasyLinux : Searching for user(%s) data's\n",User));
 const char *expression = "(uid=%s)";
 char *Search;
 const char * const Attribs[] = {"unixHomeDirectory","gidNumber","uidNumber","displayName",NULL};
@@ -66,6 +66,7 @@ if( LDB_SUCCESS != ldb_search(ldb, mem_ctx, &resultMsg, NULL, LDB_SCOPE_DEFAULT,
   return MAPISTORE_ERROR;
   }
 
+elContext->User.uid = talloc_strdup(mem_ctx, User);
 for (i = 0; i < resultMsg->count; ++i) 
   {
   for( j=0 ; j<resultMsg->msgs[i]->num_elements ; j++)
@@ -81,6 +82,12 @@ for (i = 0; i < resultMsg->count; ++i)
       elContext->User.homeDirectory = talloc_strdup(mem_ctx, (char *)MessageElement->values[0].data);
     }
   }
+if( elContext->User.homeDirectory == NULL )
+  {  
+  DEBUG(0, ("ERROR: MAPIEasyLinux - user informations unavailable ! No homeDirectory\n"));
+  return MAPISTORE_ERROR;
+  }
+    
 DEBUG(3, ("MAPIEasyLinux :     User (uid:%i gid:%i displayName:%s homeDirectory:%s) \n", elContext->User.uidNumber, elContext->User.gidNumber, 
                                     elContext->User.displayName, elContext->User.homeDirectory));
 talloc_unlink(mem_ctx, Search);
@@ -140,7 +147,7 @@ switch( GetBkType(&elContext->RootFolder.Uri[12]) )  // Uri is EasyLinux://INBOX
     break;
 
   case EASYLINUX_MAILDIR:
-    OpenMailDir(elContext);
+    OpenRootMailDir(elContext);
     break;
     
   case EASYLINUX_CALENDAR:  
@@ -175,6 +182,44 @@ elContext->RootFolder.elContext = elContext;
 //Dump((void *)&elContext->RootFolder);
 talloc_unlink(mem_ctx, Search);
 return MAPISTORE_SUCCESS;
+}
+
+/* 
+ * GetUniqueFMID
+ *
+ * This function is a copy of original openchangedb_get_new_folderID from libproxy/openchangedb.C
+ *
+ * I extract this function because :
+ *    - Function can be implemented directly in the backend
+ *    - 
+ */
+enum MAPISTATUS GetUniqueFMID(struct EasyLinuxContext *elContext, uint64_t *FMID)
+{
+int			ret;
+struct ldb_result	*res;
+struct ldb_message	*msg;
+const char * const	attrs[] = { "*", NULL };
+
+/* Get the current GlobalCount */
+ret = ldb_search(elContext->LdbTable, elContext->mem_ctx, &res, ldb_get_root_basedn(elContext->LdbTable),
+			 LDB_SCOPE_SUBTREE, attrs, "(objectClass=server)");
+if( ret != LDB_SUCCESS || !res->count )
+  return MAPI_E_NOT_FOUND;			 
+
+*FMID = ldb_msg_find_attr_as_uint64(res->msgs[0], "GlobalCount", 0);
+
+/* Update GlobalCount value */
+msg = ldb_msg_new(elContext->mem_ctx);
+msg->dn = ldb_dn_copy(msg, ldb_msg_find_attr_as_dn(elContext->LdbTable, elContext->mem_ctx, res->msgs[0], "distinguishedName"));
+ldb_msg_add_fmt(msg, "GlobalCount", "%llu", (long long unsigned int) ((*FMID) + 1));
+msg->elements[0].flags = LDB_FLAG_MOD_REPLACE;
+ret = ldb_modify(elContext->LdbTable, msg);
+if( ret != LDB_SUCCESS || !res->count )
+  return MAPI_E_NOT_FOUND;			 
+
+*FMID = (exchange_globcnt(*FMID) << 16) | 0x0001;
+
+return MAPI_E_SUCCESS;
 }
 
 

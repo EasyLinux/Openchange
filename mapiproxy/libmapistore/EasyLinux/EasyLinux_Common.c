@@ -180,31 +180,40 @@ struct EasyLinuxProp {
  */
 void StorePropertie(struct EasyLinuxTable *Table, struct SPropValue Prop)
 {
-struct EasyLinuxProp *elProp;
-struct EasyLinuxProp **NewProps, **OldProps;
-int i;
+struct 	EasyLinuxProp **NewProps, **OldProps, *CurProps;
+int i, 	SizeToAllocate;
+uint8_t *Val8; 
 
 // Table contains a dynamic table, we need to add one element
 OldProps = Table->Props;
+SizeToAllocate = sizeof(struct EasyLinuxProp *) * (Table->rowCount +1);
 // Reserve room for pointers
-*NewProps = (struct EasyLinuxProp *)talloc_zero_size(Table->elContext->mem_ctx, sizeof(struct EasyLinuxProp) * (Table->rowCount +1) );
+NewProps = (struct EasyLinuxProp **)talloc_zero_size(Table->elContext->mem_ctx, SizeToAllocate );
 for( i=0 ; i< Table->rowCount ; i++)
   NewProps[i] = OldProps[i];
 Table->Props = NewProps;
 Table->rowCount++;
-talloc_unlink(Table->elContext->mem_ctx,OldProps);
+if( OldProps != NULL )
+  talloc_unlink(Table->elContext->mem_ctx,OldProps);
 
-// NewProps[i] is the new allocated Prop structure
-
-DEBUG(0,("MAPIEasyLinux :      %i num Properties \n", Table->rowCount));
+NewProps[Table->rowCount-1] = (struct EasyLinuxProp *)talloc_zero_size(Table->elContext->mem_ctx, sizeof(struct EasyLinuxProp));
+CurProps = NewProps[Table->rowCount-1];
+CurProps->PropTag = Prop.ulPropTag;
 
 switch( Prop.ulPropTag & 0x0000FFFF )
   {
   case PT_UNICODE:
+    CurProps->PropType = PT_UNICODE;
+    CurProps->PropValue = (char *)talloc_strdup(Table->elContext->mem_ctx, Prop.value.lpszW);
     DEBUG(0,("MAPIEasyLinux :      0x%08X: %s\n", Prop.ulPropTag, (char *)Prop.value.lpszA));
     break;
     
   case PT_I8:
+    CurProps->PropType = PT_I8;
+    CurProps->PropValue = (char *)talloc_asprintf(Table->elContext->mem_ctx, "0x%X", Prop.value.l);
+    //Val8 = (uint8_t *)talloc_zero_size(Table->elContext->mem_ctx, sizeof(uint8_t));
+    //*Val8 = Prop.value.l; 
+    //CurProps->PropValue = (void *)Val8;
     DEBUG(0,("MAPIEasyLinux :      0x%08X: %i\n", Prop.ulPropTag, (int8_t)Prop.value.l));
     break;
   
@@ -212,12 +221,12 @@ switch( Prop.ulPropTag & 0x0000FFFF )
     DEBUG(0,("MAPIEasyLinux :      0x%08X: Need to be taken\n", Prop.ulPropTag));
     break;
   }
- 
-
 
 
 
 /*
+
+
 switch( Prop.ulPropTag & 0xFFFF0000 )
   {
   case 0x30010000:  // PidTagDisplayName  0x3001001F 

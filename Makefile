@@ -949,7 +949,7 @@ mapiproxy/libmapistore/EasyLinux/MAPIStoreEasyLinux.$(SHLIBEXT).$(LIBEASY_SO_VER
     mapiproxy/libmapistore/EasyLinux/EasyLinux_Maildir.po \
 		mapiproxy/libmapistore.$(SHLIBEXT).$(PACKAGE_VERSION)
 		@echo "Link libmapistore"
-		@$(CC) -o $@ $^ $(DSOOPT) $(LDFLAGS) -lldap -llber -lxml2 -Wl,-soname,MAPIStoreEasyLinux.$(SHLIBEXT).$(LIBEASY_SO_VERSION)
+		@$(CC) -o $@ $^ $(DSOOPT) $(LDFLAGS) -lldap -llber -lxml2 -lmapiproxy -Wl,-soname,MAPIStoreEasyLinux.$(SHLIBEXT).$(LIBEASY_SO_VERSION)
 	
 libeasy-install:  mapiproxy/libmapistore/EasyLinux/MAPIStoreEasyLinux.$(SHLIBEXT).$(LIBEASY_SO_VERSION) 
 		$(INSTALL) mapiproxy/libmapistore/EasyLinux/MAPIStoreEasyLinux.$(SHLIBEXT).$(LIBEASY_SO_VERSION) $(libdir)/mapistore_backends 

@@ -42,7 +42,7 @@
 
 struct tdb_wrap {
 	struct tdb_context	*tdb;
-	const char		*name;
+	const char		    *name;
 	struct tdb_wrap		*prev;
 	struct tdb_wrap		*next;
 };

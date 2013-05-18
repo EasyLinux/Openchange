@@ -38,7 +38,7 @@ struct EasyLinuxFolder {
 	char 														*Comment;
 	char 														*RelPath;
 	char														*FullPath;
-	int 														FolderType;   // FOLDER_ROOT=0x0, FOLDER_GENERIC=0x1, FOLDER_SEARCH=0x2
+	int 														FolderType;   	// FOLDER_ROOT=0x0, FOLDER_GENERIC=0x1, FOLDER_SEARCH=0x2
 	struct EasyLinuxFolder					*Parent;
 	struct EasyLinuxTable           *Table;
 	struct EasyLinuxContext         *elContext;
@@ -61,6 +61,7 @@ struct EasyLinuxMessage {
  *   elContext							point to Context object
  *   rowCount               number of records in Table
  *   Props                  point to Properties
+ *   Restrictions						point to Restrictions
  */
 	  
 struct EasyLinuxTable {
@@ -70,6 +71,7 @@ struct EasyLinuxTable {
 	struct EasyLinuxContext         *elContext;
 	uint32_t												rowCount;
 	struct EasyLinuxProp						**Props;
+	struct EasyLinuxProp						**Restrictions;  		
 	};
 	
 /*
@@ -82,19 +84,22 @@ struct EasyLinuxTable {
 struct EasyLinuxProp {
 	uint32_t												PropTag;
 	int															PropType;
-	void														*PropValue;
+	char														*PropValue;
 	};	
 	
 	
 	
 struct EasyLinuxContext {
-  enum EasyLinux_Struct_Type			stType;
-  enum EasyLinux_Backend_Type			bkType;
-  TALLOC_CTX 											*mem_ctx;
+  enum EasyLinux_Struct_Type			stType;					// Type of structure used when a function send a void * 
+  enum EasyLinux_Backend_Type			bkType;					// Type of backstore -> INBOX, CALENDAR, ...
+  TALLOC_CTX 											*mem_ctx;				// Talloc memory context
+  struct mapistore_context				*mstore_ctx;		// mapistore_context *   use for indexing search
   void														*bkContext;
-	struct EasyLinuxUser	  				User;
-	struct EasyLinuxFolder  				RootFolder;
+	struct EasyLinuxUser	  				User;						// User information 
+	struct EasyLinuxFolder  				RootFolder;			// Rootfolder
 	struct EasyLinuxTable           Table;
+	struct tdb_wrap									*Indexing;			// Pointer to Indexing.tbd
+	struct ldb_context              *LdbTable;			// Pointer to AD
 	};
 	
 struct EasyLinuxGeneric {
@@ -130,6 +135,7 @@ void StorePropertie(struct EasyLinuxTable *, struct SPropValue);
  */
 int SetUserInformation(struct EasyLinuxContext *, TALLOC_CTX *, char *, struct ldb_context *);
 int InitialiseRootFolder(struct EasyLinuxContext *, TALLOC_CTX *, char *, struct ldb_context *,const char *);
+enum MAPISTATUS GetUniqueFMID(struct EasyLinuxContext *, uint64_t *);
 
 /*
  * EasyLinux Calendar functions 
@@ -164,7 +170,9 @@ int  GetJournal(struct EasyLinuxFolder *);
 /*
  * EasyLinux_Maildir functions
  */
-enum mapistore_error OpenMailDir(struct EasyLinuxContext *);
+enum mapistore_error OpenRootMailDir(struct EasyLinuxContext *);
+void ListRootContent(struct EasyLinuxContext *);
+
 int OmmitSpecialFolder(struct EasyLinuxFolder *, char *);
 int GetMaildirChildCount(struct EasyLinuxFolder *, uint32_t);
 enum mapistore_error MailDirCreateFolder(struct EasyLinuxFolder *);

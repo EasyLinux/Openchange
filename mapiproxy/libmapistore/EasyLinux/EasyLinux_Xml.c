@@ -69,10 +69,12 @@ struct XmlBackend  *elXml;
 char *Path, *File;
 int  hFile;
 
+
+DEBUG(0, ("MAPIEasyLinux : --> %s\n",&elContext->RootFolder.Uri[12]));  // FALLBACK/0x2802000000000001/
 File = talloc_asprintf(elContext->mem_ctx,"%s.xml",elContext->RootFolder.displayName);
 elContext->bkType = EASYLINUX_FALLBACK;
 elContext->RootFolder.stType = EASYLINUX_FOLDER;
-elContext->RootFolder.RelPath = talloc_strdup(elContext->mem_ctx, (char *)"/");
+elContext->RootFolder.RelPath = talloc_asprintf(elContext->mem_ctx, "FALLBACK/%s",elContext->RootFolder.displayName);
 elContext->RootFolder.FolderType = 0; // FOLDER_ROOT
 elContext->RootFolder.FullPath = talloc_asprintf(elContext->mem_ctx,"%s/Maildir/FALLBACK/%s",elContext->User.homeDirectory, File);
 
@@ -125,7 +127,23 @@ return MAPISTORE_SUCCESS;
 
 int SaveMessageXml(struct EasyLinuxMessage *elMessage, TALLOC_CTX *mem_ctx)
 {
+int i;
 DEBUG(0, ("MAPIEasyLinux : Saving XML Message\n"));
+DEBUG(0, ("MAPIEasyLinux :     MID: %lX\n",elMessage->MID));
+DEBUG(0, ("MAPIEasyLinux :     Folder: %s\n",elMessage->Parent->RelPath));
+DEBUG(0, ("MAPIEasyLinux :     File: %s\n",elMessage->Parent->FullPath));
+DEBUG(0, ("MAPIEasyLinux :     Table with %i records\n",elMessage->Table->rowCount));
+for(i=0 ; i<elMessage->Table->rowCount ; i++)
+  {
+  DEBUG(0, ("MAPIEasyLinux :         0x%08X: %s\n",elMessage->Table->Props[i]->PropTag, elMessage->Table->Props[i]->PropValue));
+  }
+
+
+
+
+
+
+
 /*
 xmlDocPtr doc = NULL;       	// document pointer 
 xmlNodePtr root_node = NULL;	// node pointers 

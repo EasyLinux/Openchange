@@ -2,7 +2,6 @@
  * MAPIStoreEasyLinux - this file is part of EasyLinux project
  *
  * Copyright (C) 2013 Aisysco Ltd
- *
  * Author: Serge NOEL <serge.noel@net6a.com>
  *
  * This file is free software; you can redistribute it and/or modify
@@ -30,6 +29,8 @@
  */
 
 #include "mapiproxy/libmapistore/mapistore.h"
+#include "mapiproxy/libmapiproxy/libmapiproxy.h"
+#include "mapiproxy/libmapistore/mapistore_private.h"
 #include "mapiproxy/libmapistore/mapistore_errors.h"
 #include "mapiproxy/libmapistore/EasyLinux/MAPIStoreEasyLinux.h"
 #include <talloc.h>
@@ -52,8 +53,17 @@
 
 /* 
  * OpenMaildir 
+ *
+ * This function is called after a CreateContext, we have some work todo
+ *   1 - open Maildir and scan to find New or Deleted items
+ *  
+ int res =stat(srcfile,&file_prop); // informations fichier
+time_t date =file_prop.st_mtime;
+struct tm* gmt=gmtime(&date); 
+ 
+ 
  */
-enum mapistore_error OpenMailDir(struct EasyLinuxContext *elContext)
+enum mapistore_error OpenRootMailDir(struct EasyLinuxContext *elContext)
 {
 char *File;
 // Uri   EasyLinux://INBOX/Sent
@@ -68,9 +78,15 @@ if( strcmp(elContext->RootFolder.RelPath,".") == 0 )
   {
   elContext->RootFolder.RelPath[0] = '/';
  	elContext->RootFolder.FullPath = talloc_asprintf(elContext->mem_ctx,"%s/Maildir/",elContext->User.homeDirectory);
+  DEBUG(3,("MAPIEasyLinux:  Open INBOX Folder (%s)\n", elContext->RootFolder.FullPath));
+ 	ListRootContent(elContext);
  	}
 else
+  {
  	elContext->RootFolder.FullPath = talloc_asprintf(elContext->mem_ctx,"%s/Maildir/.%s",elContext->User.homeDirectory, File);
+  DEBUG(0,("MAPIEasyLinux : Open %s (%s) Folder\n", elContext->RootFolder.RelPath, elContext->RootFolder.FullPath));
+ 	//ListContent(elContext, false);
+ 	}
 DEBUG(3, ("MAPIEasyLinux :   OpenMailDir(%s)\n", elContext->RootFolder.FullPath));  
 
 // Test if Maildir !exist --> if no we have to create it
@@ -78,6 +94,272 @@ DEBUG(3, ("MAPIEasyLinux :   OpenMailDir(%s)\n", elContext->RootFolder.FullPath)
 talloc_unlink(elContext->mem_ctx, File);
 return MAPISTORE_SUCCESS;
 }
+
+/* 
+ * ListRootContent
+ *
+ * This function list items included in Root maildir 
+ *
+ *
+ */
+void ListRootContent(struct EasyLinuxContext *elContext)
+{
+DIR *dDir, *dMsg;
+struct dirent *dEntry, *dEMsg;
+char *SpecialNames[] = {".Sent",".Trash",".Outbox",".Drafts"};
+char *tmpName, *Uri, *MsgFolder, *MsgFullPath;
+int i, j, k, l, m, n, len, Ok, nSub, SoftDeleted, Res;  
+uint64_t  *FMID;
+  
+len=4; // len=4 number of specials folders
+
+// Scan for messages   in cur dir
+MsgFolder = (char *)talloc_asprintf(elContext->mem_ctx, "%scur", elContext->RootFolder.FullPath);
+DEBUG(0,("MAPIEasyLinux :      Scan messages in %s \n", MsgFolder));
+dMsg = opendir(MsgFolder);
+while ((dEMsg = readdir(dMsg))) 
+  {
+  if ( dEMsg->d_type == isFile )
+    {  // We find a message
+    tmpName = talloc_asprintf(elContext->mem_ctx, "*%s*", dEMsg->d_name);
+    len = strlen(tmpName);
+    // Remove flags part of message: 1368218756.V801I471c4M321821.OpenChange:2,S should be -> *1368218756.V801I471c4M321821.OpenChange*
+    for(k=0 ; k<len ; k++)
+      {
+      if( tmpName[k] == ':' )
+        {
+        dEMsg->d_name[k-1] = 0;
+        tmpName[k] = 0;
+        }
+      }
+    // Now search it in indexing.tdb  
+    FMID = (uint64_t *)talloc_zero_size(elContext->mem_ctx, sizeof(uint64_t));
+    Res = mapistore_indexing_record_get_fmid(elContext->mstore_ctx, elContext->User.uid, tmpName, true, FMID, (_Bool *) &SoftDeleted);
+    if( Res != MAPISTORE_SUCCESS )  
+      {  // No FMID exist for this folder -> add one
+			DEBUG(3,("MAPIEasyLinux :        Test for %s using %s Not Found \n",elContext->User.uid, tmpName));
+			openchangedb_get_new_folderID(elContext->LdbTable, FMID);
+			MsgFullPath = talloc_asprintf(elContext->mstore_ctx, "%s/%s",MsgFolder,dEMsg->d_name);
+			mapistore_indexing_record_add(elContext->mem_ctx,elContext->mstore_ctx->indexing_list, *FMID, MsgFullPath);
+			DEBUG(0,("MAPIEasyLinux :          Add %lX:%s \n",*FMID, MsgFullPath));
+			talloc_unlink(elContext->mstore_ctx, MsgFullPath);
+			}
+		else
+			DEBUG(0,("MAPIEasyLinux :          OK 0x%lX:%s\n",*FMID, dEMsg->d_name));
+		talloc_unlink(elContext->mem_ctx, FMID);
+    }
+  }
+talloc_unlink(elContext->mem_ctx, MsgFolder);
+
+// Scan for messages in new dir
+MsgFolder = (char *)talloc_asprintf(elContext->mem_ctx, "%snew", elContext->RootFolder.FullPath);
+DEBUG(0,("MAPIEasyLinux :      Scan messages in %s \n", MsgFolder));
+dMsg = opendir(MsgFolder);
+while ((dEMsg = readdir(dMsg))) 
+  {
+  if ( dEMsg->d_type == isFile )
+    {  // We find a message
+    tmpName = talloc_asprintf(elContext->mem_ctx, "*%s*", dEMsg->d_name);
+    len = strlen(tmpName);
+    // Remove flags part of message: 1368218756.V801I471c4M321821.OpenChange:2,S should be -> *1368218756.V801I471c4M321821.OpenChange*
+    for(k=0 ; k<len ; k++)
+      {
+      if( tmpName[k] == ':' )
+        {
+        dEMsg->d_name[k-1] = 0;
+        tmpName[k] = 0;
+        }
+      }
+    // Now search it in indexing.tdb  
+    FMID = (uint64_t *)talloc_zero_size(elContext->mem_ctx, sizeof(uint64_t));
+    Res = mapistore_indexing_record_get_fmid(elContext->mstore_ctx, elContext->User.uid, tmpName, true, FMID, (_Bool *) &SoftDeleted);
+    if( Res != MAPISTORE_SUCCESS )  
+      {  // No FMID exist for this folder -> add one
+			DEBUG(3,("MAPIEasyLinux :        Test for %s using %s Not Found \n",elContext->User.uid, tmpName));
+			openchangedb_get_new_folderID(elContext->LdbTable, FMID);
+			MsgFullPath = talloc_asprintf(elContext->mstore_ctx, "%s/%s",MsgFolder,dEMsg->d_name);
+			mapistore_indexing_record_add(elContext->mem_ctx,elContext->mstore_ctx->indexing_list, *FMID, MsgFullPath);
+			DEBUG(0,("MAPIEasyLinux :          Add %lX:%s \n",*FMID, MsgFullPath));
+			talloc_unlink(elContext->mstore_ctx, MsgFullPath);
+			}
+		else
+			DEBUG(0,("MAPIEasyLinux :          OK 0x%lX:%s\n",*FMID, dEMsg->d_name));
+		talloc_unlink(elContext->mem_ctx, FMID);
+    }
+  }
+talloc_unlink(elContext->mem_ctx, MsgFolder);
+
+
+
+
+
+
+  
+dDir = opendir(elContext->RootFolder.FullPath);
+while ((dEntry = readdir(dDir))) 
+  {
+  // We have to avoid non Maildir folders
+  Ok=1;
+  if ( (dEntry->d_type == isDir) && (dEntry->d_name[0] == '.') && (dEntry->d_name[1] != 0) && (dEntry->d_name[1] != '.') )
+    {
+    for(i=0 ; i<len ; i++)
+      {  // Maildir cannot Start with .Sent, .Trash, .Outbox or .Drafts because those are used in different backend
+      len = strlen(SpecialNames[i]);
+      if( !strncmp(SpecialNames[i], dEntry->d_name, len) )
+        Ok=0;
+      }
+    if( Ok )
+      {  // We found a Maildir folder in the form .Folder1.Folder2.Folder3
+      DEBUG(3,("MAPIEasyLinux :      Find %s  in INBOX%s  \n", dEntry->d_name, elContext->RootFolder.RelPath));
+      tmpName = talloc_strdup(elContext->mem_ctx,dEntry->d_name);
+      // Count number of subfolders
+      nSub=0;
+      len = strlen(dEntry->d_name);
+      for( i=0 ; i<len ; i++)
+        {
+        if( dEntry->d_name[i] == '.' )
+          {
+          nSub++;      
+          if( i>0 ) 
+          	tmpName[i] = 0; // Split tmpName, avoid first .
+          }
+        }
+      // Now, we have to split folder name into indiviual folder eg: Folder1/  Folder1/Folder2  Folder1/Folder2/Folder3/ 
+      FMID = talloc_zero_size(elContext->mem_ctx, sizeof(uint64_t) );
+      for( i=0 ; i<nSub ; i++)
+        {
+        // is EasyLinux://INBOX/<tmpName>/ associated with a FMID ?  Leadind / mean Folder
+        Uri = talloc_asprintf(elContext->mem_ctx,"EasyLinux://INBOX/%s/",tmpName);
+        Res = mapistore_indexing_record_get_fmid(elContext->mstore_ctx, elContext->User.uid, Uri, false, FMID, (_Bool *) &SoftDeleted);
+        if( (Res != MAPISTORE_SUCCESS) )
+          {  // No FMID exist for this folder -> add one
+					DEBUG(3,("MAPIEasyLinux :        Test for %s using %s Not Found \n",elContext->User.uid, Uri));
+					openchangedb_get_new_folderID(elContext->LdbTable, FMID);
+					mapistore_indexing_record_add(elContext->mem_ctx,elContext->mstore_ctx->indexing_list, *FMID, Uri);
+					DEBUG(0,("MAPIEasyLinux :          Add %lX:%s \n",*FMID, Uri));
+					}
+				else
+				  DEBUG(0,("MAPIEasyLinux :          OK 0x%lX:%s\n",*FMID, Uri));
+				  
+        j=0;
+        for(j=0 ; j<len ; j++)
+          {
+          if( tmpName[j] == 0 )
+            {
+            tmpName[j] = '.';
+            j=len;
+            }
+          }
+        }
+      talloc_unlink(elContext->mem_ctx, FMID);
+      // Scan for messages  subdirs in cur dir
+			MsgFolder = (char *)talloc_asprintf(elContext->mem_ctx, "%s%s/cur", elContext->RootFolder.FullPath, dEntry->d_name);
+			DEBUG(0,("MAPIEasyLinux :      Scan messages in %s \n", MsgFolder));
+			dMsg = opendir(MsgFolder);
+			while ((dEMsg = readdir(dMsg))) 
+			  {
+			  if ( dEMsg->d_type == isFile )
+			    {  // We find a message
+			    tmpName = talloc_asprintf(elContext->mem_ctx, "*%s*", dEMsg->d_name);
+			    len = strlen(tmpName);
+			    // Remove flags part of message: 1368218756.V801I471c4M321821.OpenChange:2,S should be -> *1368218756.V801I471c4M321821.OpenChange*
+			    for(k=0 ; k<len ; k++)
+			      {
+			      if( tmpName[k] == ':' )
+			        {
+			        dEMsg->d_name[k-1] = 0;
+			        tmpName[k] = 0;
+			        }
+			      }
+			    // Now search it in indexing.tdb  
+			    FMID = (uint64_t *)talloc_zero_size(elContext->mem_ctx, sizeof(uint64_t));
+			    Res = mapistore_indexing_record_get_fmid(elContext->mstore_ctx, elContext->User.uid, tmpName, true, FMID, (_Bool *) &SoftDeleted);
+			    if( Res != MAPISTORE_SUCCESS )  
+			      {  // No FMID exist for this folder -> add one
+						DEBUG(3,("MAPIEasyLinux :        Test for %s using %s Not Found \n",elContext->User.uid, tmpName));
+						openchangedb_get_new_folderID(elContext->LdbTable, FMID);
+						MsgFullPath = talloc_asprintf(elContext->mstore_ctx, "%s/%s",MsgFolder,dEMsg->d_name);
+						mapistore_indexing_record_add(elContext->mem_ctx,elContext->mstore_ctx->indexing_list, *FMID, MsgFullPath);
+						DEBUG(0,("MAPIEasyLinux :          Add %lX:%s \n",*FMID, MsgFullPath));
+						talloc_unlink(elContext->mstore_ctx, MsgFullPath);
+						}
+					else
+						DEBUG(0,("MAPIEasyLinux :          OK 0x%lX:%s\n",*FMID, dEMsg->d_name));
+					talloc_unlink(elContext->mem_ctx, FMID);
+			    }
+			  } 
+			talloc_unlink(elContext->mem_ctx, MsgFolder);
+      // Scan for messages  subdirs in new dir
+			MsgFolder = (char *)talloc_asprintf(elContext->mem_ctx, "%s%s/new", elContext->RootFolder.FullPath, dEntry->d_name);
+			DEBUG(0,("MAPIEasyLinux :      Scan messages in %s \n", MsgFolder));
+			dMsg = opendir(MsgFolder);
+			while ((dEMsg = readdir(dMsg))) 
+			  {
+			  if ( dEMsg->d_type == isFile )
+			    {  // We find a message
+			    tmpName = talloc_asprintf(elContext->mem_ctx, "*%s*", dEMsg->d_name);
+			    len = strlen(tmpName);
+			    // Remove flags part of message: 1368218756.V801I471c4M321821.OpenChange:2,S should be -> *1368218756.V801I471c4M321821.OpenChange*
+			    for(k=0 ; k<len ; k++)
+			      {
+			      if( tmpName[k] == ':' )
+			        {
+			        dEMsg->d_name[k-1] = 0;
+			        tmpName[k] = 0;
+			        }
+			      }
+			    // Now search it in indexing.tdb  
+			    FMID = (uint64_t *)talloc_zero_size(elContext->mem_ctx, sizeof(uint64_t));
+			    Res = mapistore_indexing_record_get_fmid(elContext->mstore_ctx, elContext->User.uid, tmpName, true, FMID, (_Bool *) &SoftDeleted);
+			    if( Res != MAPISTORE_SUCCESS )  
+			      {  // No FMID exist for this folder -> add one
+						DEBUG(3,("MAPIEasyLinux :        Test for %s using %s Not Found \n",elContext->User.uid, tmpName));
+						openchangedb_get_new_folderID(elContext->LdbTable, FMID);
+						MsgFullPath = talloc_asprintf(elContext->mstore_ctx, "%s/%s",MsgFolder,dEMsg->d_name);
+						mapistore_indexing_record_add(elContext->mem_ctx,elContext->mstore_ctx->indexing_list, *FMID, MsgFullPath);
+						DEBUG(0,("MAPIEasyLinux :          Add %lX:%s \n",*FMID, MsgFullPath));
+						talloc_unlink(elContext->mstore_ctx, MsgFullPath);
+						}
+					else
+						DEBUG(0,("MAPIEasyLinux :          OK 0x%lX:%s\n",*FMID, dEMsg->d_name));
+					talloc_unlink(elContext->mem_ctx, FMID);
+			    }
+			  } 
+			talloc_unlink(elContext->mem_ctx, MsgFolder);
+			
+      talloc_unlink(elContext->mem_ctx, tmpName);
+      }
+    }
+  }
+closedir(dDir);
+}
+
+
+/* 
+ * Return 1 if Name is not a special folder
+ *
+int ExcludeSpecialFolder(char *Name)
+{
+char *SpecialNames[] = {".", "..", ".Sent",".Trash",".Outbox",".Drafts"};
+char *Search;
+int i, len=2;  // len: Normal mail dir ommit only . and ..
+
+if( Name[0] != '.' )
+  return 0; // Not a Maildir subdirectory 
+
+// If current folder is Maildir root, we have to omit .Sent, .Trash, .Outbox and .Drafts  
+Search = talloc_asprintf(elFolder->elContext->mem_ctx,"%s/Maildir/",elFolder->elContext->User.homeDirectory);
+if( strcmp(Search,elFolder->FullPath) == 0 )
+  len=6; // This is the root maildir ommit all Special names
+talloc_unlink(elFolder->elContext->mem_ctx, Search);
+
+for(i=0; i<len ; i++)  // If Name is one of Special folders, omit it
+  if( strcmp(Name, SpecialNames[i]) == 0 )
+    return 0;
+
+return 1;
+}
+*/
 
 /*
  * Get number of childs of actual Folder
@@ -88,6 +370,7 @@ int Val=0;
 DIR *dDir;
 char *sDir;
 struct dirent *dEntry;
+
 
 switch( table_type )
   {
@@ -114,7 +397,7 @@ switch( table_type )
         }
       }
     closedir(dDir);
-    DEBUG(3,("MAPIEasyLinux :      Find %i Messages in %s\n",Val,elFolder->FullPath)); 
+    DEBUG(0,("MAPIEasyLinux :      Find %i Messages in %s\n",Val,elFolder->FullPath)); 
     talloc_unlink(elFolder->elContext->mem_ctx, sDir);
     break;
     
@@ -130,7 +413,7 @@ switch( table_type )
         Val += OmmitSpecialFolder(elFolder,dEntry->d_name);
       }
     closedir(dDir);
-    DEBUG(3,("MAPIEasyLinux :      Find %i Folders in %s\n",Val,elFolder->FullPath)); 
+    DEBUG(0,("MAPIEasyLinux :      Find %i Folders in %s\n",Val,elFolder->FullPath)); 
     break;
   }  
 return Val;
