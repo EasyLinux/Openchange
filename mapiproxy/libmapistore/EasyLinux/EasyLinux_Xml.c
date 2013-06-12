@@ -58,47 +58,45 @@ struct XmlBackend {
   };
 
 /*
- * OpenXml root file
+ * Open .tdb root file
  *
- * Xml files are used for FALLBACK entries, this function try to open <homedir>/Maildir/FALLBACK/<Folder>.xml
- * if XmlFile doesn't exist -> create it
+ * tdb files are used for FALLBACK entries, this function try to open <homedir>/Maildir/FALLBACK/<FID>/<FID>.tdb
+ * (if .tdb doesn't exist -> create it)
  */
 int OpenFallBack(struct EasyLinuxContext *elContext)
 {
-struct XmlBackend  *elXml;
 char *Path, *File;
-int  hFile;
+int  hFile, i;
+DIR *dPath;
 
+// Find path and tdb file name
+Path = talloc_asprintf(elContext->mem_ctx,"%s/Maildir/%s\n",elContext->User.homeDirectory, &elContext->RootFolder.Uri[12]);
+File = talloc_asprintf(elContext->mem_ctx,"%stdb",&elContext->RootFolder.Uri[21]);
+i=0;
+while( File[i] )
+  {
+  if( File[i] == '/' )
+    File[i] = '.';
+  i++;
+  }
 
-DEBUG(0, ("MAPIEasyLinux : --> %s\n",&elContext->RootFolder.Uri[12]));  // FALLBACK/0x2802000000000001/
-File = talloc_asprintf(elContext->mem_ctx,"%s.xml",elContext->RootFolder.displayName);
+//DEBUG(0, ("MAPIEasyLinux : --> Path %s\n",Path));
+//DEBUG(0, ("MAPIEasyLinux : --> File %s\n",File));  // FALLBACK/0x2802000000000001/
+  
+// Test if directory exist
+dPath = opendir(Path);  
+if( dPath == NULL )
+  RecursiveMkDir(&elContext->User, Path, 0770);  // Create dir
+else
+  closedir(dPath);
+
 elContext->bkType = EASYLINUX_FALLBACK;
 elContext->RootFolder.stType = EASYLINUX_FOLDER;
-elContext->RootFolder.RelPath = talloc_asprintf(elContext->mem_ctx, "FALLBACK/%s",elContext->RootFolder.displayName);
+elContext->RootFolder.RelPath = File;
 elContext->RootFolder.FolderType = 0; // FOLDER_ROOT
-elContext->RootFolder.FullPath = talloc_asprintf(elContext->mem_ctx,"%s/Maildir/FALLBACK/%s",elContext->User.homeDirectory, File);
-
-// Store Path and FileName
-Path = talloc_asprintf(elContext->mem_ctx,"%s/Maildir/FALLBACK",elContext->User.homeDirectory);
-elXml = (struct XmlBackend *)talloc_zero_size(elContext->mem_ctx, sizeof(struct XmlBackend *));
-// Store Xml parameters in Backend
-elContext->bkContext=(void *)elXml;
-
-// Open Xml File
-hFile = open(elContext->RootFolder.FullPath,O_RDONLY);
-if( hFile != -1 )
-  close(hFile);  // File already exist
-else
-  {  // First access (auto-provisionning) -> we create file
-  DEBUG(0,("MAPIEasyLinux : Create %s\n",Path));
-  RecursiveMkDir(elContext,Path,0755);
-  CreateXmlFile(elContext);
-  }
-  
-// Store Xml file in memory
+elContext->RootFolder.FullPath = talloc_asprintf(elContext->mem_ctx,"%s%s",Path, File);
 
 talloc_unlink(elContext->mem_ctx, Path);
-talloc_unlink(elContext->mem_ctx, File);
 return MAPISTORE_SUCCESS;
 }
 

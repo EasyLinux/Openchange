@@ -32,6 +32,7 @@
 
 #include "mapiproxy/libmapistore/mapistore.h"
 #include "mapiproxy/libmapistore/mapistore_errors.h"
+#include "mapiproxy/libmapistore/mapistore_private.h"
 #include "mapiproxy/libmapistore/EasyLinux/MAPIStoreEasyLinux.h"
 #include <talloc.h>
 #include <core/ntstatus.h>
@@ -116,16 +117,25 @@ static enum mapistore_error BackendCreateContext(TALLOC_CTX *mem_ctx,
                             const char *uri, void **context_object)
 {
 struct EasyLinuxContext *elContext;
-//int Len;
+int Len;
+
+Len = strlen(indexingTdb->name);
+Len -= 12;
+
+//DEBUG(0, ("MAPIEasyLinux : Tdb %s\n", (char *)indexingTdb->name));  // /var/lib/samba/private/mapistore/Administrator/indexing.tdb
 
 // Initialise Backend structure
 elContext = (struct EasyLinuxContext *)talloc_zero_size(mem_ctx, sizeof(struct EasyLinuxContext) );
 elContext->stType 			= EASYLINUX_BACKEND;
 elContext->mem_ctx  		= mem_ctx;
 elContext->Indexing 		= indexingTdb;
+elContext->IndexingPath = talloc_strdup(mem_ctx,indexingTdb->name);
+elContext->IndexingPath[Len] = 0;
 elContext->LdbTable 		= conn_info->oc_ctx;
 elContext->mstore_ctx 	= conn_info->mstore_ctx;
 *context_object 				= (void *)elContext;
+
+//DEBUG(0, ("MAPIEasyLinux : Tdb %s\n", elContext->IndexingPath));  // /var/lib/samba/private/mapistore/Administrator/\0  indexing.tdb
 
 if( !conn_info )
   {  // We need connection information to get user and Openchange.ldb pointer
@@ -144,8 +154,7 @@ if( !conn_info->oc_ctx )  // We need connection information to get user and Open
 if( InitialiseRootFolder(elContext, mem_ctx, conn_info->username, conn_info->oc_ctx, uri) != MAPISTORE_SUCCESS)
   return MAPISTORE_ERR_CONTEXT_FAILED;
 
-DEBUG(0, ("MAPIEasyLinux : Context created  Uri:%s (%s)\n",uri, elContext->RootFolder.FullPath ));  
-DEBUG(0, ("MAPIEasyLinux :   Len: %i\n",(int)strlen(uri)));
+DEBUG(0, ("MAPIEasyLinux : Context created  Uri:%s \n",uri ));  
 
 // MAPIStore backend don't include a destructor function capability, we want one 
 talloc_set_destructor((void *)elContext, (int (*)(void *))BackendDestructor);
@@ -292,6 +301,9 @@ switch( elGeneric->stType )
     DEBUG(0, ("MAPIEasyLinux : ContextGetPath: Context: %lX\n",fmid));
 
     *path = NULL;
+    elContext = (struct EasyLinuxContext *)object;
+    //if( elContext->bkType == EASYLINUX_FALLBACK )
+    //  return MAPISTORE_SUCCESS;
     return MAPISTORE_ERR_INVALID_NAMESPACE;
     break;
    
@@ -332,7 +344,7 @@ return MAPISTORE_SUCCESS;
  * - a folder object
  * - a message object
  * - etc.
- *
+ *ompile samba tdb error ptyhon-config
  * When we create a context, we are in fact opening a folder, except that this folder is a root folder. For this very special 
  * case, we are only creating a context but the folder is however opened. It means that a context is also a folder. The get_root_folder 
  * functions returns a folder representation of the context object created. It lets backends directly call folder operations on 
@@ -344,7 +356,8 @@ struct EasyLinuxContext *elContext;
 
 elContext = (struct EasyLinuxContext *)backend_object;
 
-DEBUG(0,("MAPIEasyLinux : ContextGetRootFolder %lX - %s\n",elContext->RootFolder.FID, elContext->RootFolder.displayName));
+//DEBUG(0,("MAPIEasyLinux : ContextGetRootFolder %lX - %s\n",elContext->RootFolder.FID, elContext->RootFolder.displayName));
+DEBUG(0,("MAPIEasyLinux : ContextGetRootFolder %lX \n",elContext->RootFolder.FID));
 *folder_object = &elContext->RootFolder;
 
 return MAPISTORE_SUCCESS;

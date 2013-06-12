@@ -42,6 +42,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <fcntl.h>
+#include <dirent.h>
 
 
 #define YES		1
@@ -106,42 +107,55 @@ switch(elGeneric->stType)
 
 /*
  *
+ * /home/NET6A/Administrator/Maildir/FALLBACK/0x1f04000000000001/
  */
-int RecursiveMkDir(struct EasyLinuxContext *elContext, char *Path, mode_t Mode)
+int RecursiveMkDir(struct EasyLinuxUser *elUser, char *Path, mode_t Mode)
 {
-char *d;
-int i, len;
-int DoChown=0;
+int LenHomeDir, LenPath, i, j;
+DIR *curPath;
 
-DEBUG(3,("MAPIEasyLinux : RecursiveMkDir %s\n",Path));
-d = talloc_strdup(elContext->mem_ctx, Path);
-len = strlen(Path);
-for(i=1 ; i<len ; i++)
+// First test if homeDirectory exist
+
+LenHomeDir = strlen(elUser->homeDirectory);
+LenPath = strlen(Path);
+Path[LenHomeDir] = 0;
+Path[LenHomeDir] = '/';
+Path[LenPath-1] = 0;
+
+// Start from last path to homeDir
+for( i=(LenPath-3) ; i>(LenHomeDir-1) ; i--)
   {
-  if( '/' == d[i] )
+  if( Path[i] == '/' )
     {
-    d[i] = '\0';
-    if( mkdir(d, Mode) && (EEXIST != errno) )
+    Path[i] = 0;
+    // try to open path
+    curPath = opendir(Path);
+    if( curPath != NULL )
+      {  // This part of fullpath can be open, it is time to create 
+      closedir(curPath);
+      j = i+1;
+      i=LenHomeDir;
+      }
+    }
+  }
+// Now we start from homeDir to FullPath
+for( i=0 ; i!= (LenPath-1) ; i++ )
+  {
+  if( Path[i] == 0 )
+    {
+    Path[i] = '/';
+    // Create folder
+    DEBUG(3,("MAPIEasyLinux :   --> mkdir %s !\n", Path));
+    if( mkdir(Path, Mode) && (EEXIST != errno) )
       {
-      DEBUG(0,("ERROR : MAPIEasyLinux - cannot create '%s' folder\n",d));
-      talloc_unlink(elContext->mem_ctx, d);
+      DEBUG(0,("ERROR : MAPIEasyLinux - cannot create %s\n",Path));
+      DEBUG(0,("ERROR : MAPIEasyLinux - (%s)\n",strerror(errno)));
       return MAPISTORE_ERROR;
       }
-    if( strcmp(elContext->User.homeDirectory,d) == 0 )
-      DoChown = 1;
-    if( DoChown )
-      {
-      DEBUG(3,("MAPIEasyLinux : Chown('%s',%i,%i)\n",d, elContext->User.uidNumber, elContext->User.gidNumber));
-      if( chown(d, elContext->User.uidNumber, elContext->User.gidNumber) )
-        DEBUG(0,("ERROR : MAPIEasyLinux - cannot chown '%s' folder\n",d));
-      }
-    d[i++] = '/';
-    while( d[i++] == '/' );  // Pass trailing '/'
-    }  
+    chown(Path, elUser->uidNumber, elUser->gidNumber);
+    }
   }
-talloc_unlink(elContext->mem_ctx, d);
-mkdir(Path, Mode);
-chown(d, elContext->User.uidNumber, elContext->User.gidNumber);
+  
 return MAPISTORE_SUCCESS;
 }
 

@@ -50,7 +50,7 @@
 
 int SetUserInformation(struct EasyLinuxContext *elContext, TALLOC_CTX *mem_ctx, char *User, struct ldb_context *ldb)
 {
-DEBUG(0, ("MAPIEasyLinux : Searching for user(%s) data's\n",User));
+DEBUG(3, ("MAPIEasyLinux : Searching for user(%s) data's\n",User));
 const char *expression = "(uid=%s)";
 char *Search;
 const char * const Attribs[] = {"unixHomeDirectory","gidNumber","uidNumber","displayName",NULL};

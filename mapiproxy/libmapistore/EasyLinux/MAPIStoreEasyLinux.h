@@ -99,6 +99,7 @@ struct EasyLinuxContext {
 	struct EasyLinuxFolder  				RootFolder;			// Rootfolder
 	struct EasyLinuxTable           Table;
 	struct tdb_wrap									*Indexing;			// Pointer to Indexing.tbd
+	char 														*IndexingPath;	// Folder that contains indexing.tdb
 	struct ldb_context              *LdbTable;			// Pointer to AD
 	};
 	
@@ -126,7 +127,7 @@ int mapistore_init_backend(void);
  * EasyLinux_Common functions
  */
 enum EasyLinux_Backend_Type GetBkType(char *);
-int RecursiveMkDir(struct EasyLinuxContext *, char *, mode_t);
+int RecursiveMkDir(struct EasyLinuxUser *, char *, mode_t);
 void Dump(void *);
 void StorePropertie(struct EasyLinuxTable *, struct SPropValue);
   	

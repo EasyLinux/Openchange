@@ -74,6 +74,7 @@ elContext->bkType = EASYLINUX_MAILDIR;
 elContext->RootFolder.stType = EASYLINUX_FOLDER;
 elContext->RootFolder.FolderType = 0; // FOLDER_ROOT
 elContext->RootFolder.RelPath = talloc_asprintf(elContext->mem_ctx,".%s",File);
+/*
 if( strcmp(elContext->RootFolder.RelPath,".") == 0 )
   {
   elContext->RootFolder.RelPath[0] = '/';
@@ -87,6 +88,7 @@ else
   DEBUG(0,("MAPIEasyLinux : Open %s (%s) Folder\n", elContext->RootFolder.RelPath, elContext->RootFolder.FullPath));
  	//ListContent(elContext, false);
  	}
+*/ 	
 DEBUG(3, ("MAPIEasyLinux :   OpenMailDir(%s)\n", elContext->RootFolder.FullPath));  
 
 // Test if Maildir !exist --> if no we have to create it
