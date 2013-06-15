@@ -223,6 +223,7 @@ _PUBLIC_ init_backend_fn *mapistore_backend_load(TALLOC_CTX *mem_ctx, const char
 	if (!path) {
 		path = mapistore_backend_get_installdir();
 	}
+	DEBUG(0,("SNOEL: Backend path: %s\n",path));
 
 	return load_backends(mem_ctx, path);
 }
@@ -300,14 +301,25 @@ enum mapistore_error mapistore_backend_init(TALLOC_CTX *mem_ctx, const char *pat
 enum mapistore_error mapistore_backend_list_contexts(const char *username, struct tdb_wrap *tdbwrap, TALLOC_CTX *mem_ctx, struct mapistore_contexts_list **contexts_listP)
 {
 	enum mapistore_error		retval;
-	int				i;
-	struct mapistore_contexts_list	*contexts_list = NULL, *current_contexts_list;
+	int				i ;
+	struct mapistore_contexts_list	*contexts_list = NULL, *current_contexts_list, *clist;
 
 	MAPISTORE_RETVAL_IF(!username, MAPISTORE_ERR_INVALID_PARAMETER, NULL);
 	MAPISTORE_RETVAL_IF(!contexts_listP, MAPISTORE_ERR_INVALID_PARAMETER, NULL);
 
 	for (i = 0; i < num_backends; i++) {
+	  DEBUG(0,("SNOEL: List contexts for %s\n", username));
 		retval = backends[i].backend->backend.list_contexts(username, tdbwrap, mem_ctx, &current_contexts_list);
+		
+		clist = current_contexts_list;
+	  while( clist->next != NULL )
+	    {
+	    DEBUG(0,("SNOEL:   Url: %s Name: %s Tag: %s\n", clist->url, clist->name, clist->tag));
+	    clist = clist->next;
+	    }	
+		
+		
+		
 		if (retval != MAPISTORE_SUCCESS) {
 			return retval;
 		}
@@ -338,7 +350,7 @@ enum mapistore_error mapistore_backend_create_context(TALLOC_CTX *mem_ctx, struc
 	void				*backend_object = NULL;
 	int				i;
 
-	DEBUG(0, ("namespace is %s and backend_uri is '%s'\n", namespace, uri));
+	DEBUG(0, ("SNOEL: CreateContext with namespace: %s backend_uri: %s\n", namespace, uri));
 
 	context = talloc_zero(NULL, struct backend_context);
 

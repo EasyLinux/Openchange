@@ -111,7 +111,7 @@ struct ldb_result *resultMsg;
 struct ldb_message_element *MessageElement;
 int i,j;
 
-DEBUG(3,("MAPIEasyLinux : InitialiseRootFolder\n")); 
+DEBUG(0,("MAPIEasyLinux : InitialiseRootFolder\n")); 
 // We need to find link between URI and FID (64bits)
 Search = talloc_asprintf(mem_ctx,expression,uri);
 if( LDB_SUCCESS != ldb_search(ldb, mem_ctx, &resultMsg, NULL, LDB_SCOPE_DEFAULT, Attribs, "%s", Search) )
@@ -147,7 +147,7 @@ switch( GetBkType(&elContext->RootFolder.Uri[12]) )  // Uri is EasyLinux://INBOX
     break;
 
   case EASYLINUX_MAILDIR:
-    OpenRootMailDir(elContext);
+    //OpenRootMailDir(elContext);
     break;
     
   case EASYLINUX_CALENDAR:  

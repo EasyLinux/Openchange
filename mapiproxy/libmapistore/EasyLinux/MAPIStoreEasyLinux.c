@@ -86,6 +86,7 @@ return MAPISTORE_SUCCESS;
 static int BackendDestructor(void *Object)
 {
 // perform operations to clean-up everything properly 
+DEBUG(0,("MAPIEasyLinux : Destroy\n"));
 
 
 return MAPISTORE_SUCCESS;
@@ -301,27 +302,28 @@ switch( elGeneric->stType )
     DEBUG(0, ("MAPIEasyLinux : ContextGetPath: Context: %lX\n",fmid));
 
     *path = NULL;
-    elContext = (struct EasyLinuxContext *)object;
-    //if( elContext->bkType == EASYLINUX_FALLBACK )
-    //  return MAPISTORE_SUCCESS;
+    // elContext = (struct EasyLinuxContext *)object;
     return MAPISTORE_ERR_INVALID_NAMESPACE;
+    //return MAPISTORE_SUCCESS;
     break;
    
   case EASYLINUX_FOLDER:
-    elFolder = (struct EasyLinuxFolder *)object;
+    // elFolder = (struct EasyLinuxFolder *)object;
     Path = talloc_strdup(mem_ctx,"?");
     DEBUG(0, ("MAPIEasyLinux : ContextGetPath: Folder: %lX - %s\n",fmid, Path));
     break;
   
   case EASYLINUX_MSG:
-    elMessage = (struct EasyLinuxMessage *)object;
+    // elMessage = (struct EasyLinuxMessage *)object;
     Path = talloc_strdup(mem_ctx,"?");
     DEBUG(0, ("MAPIEasyLinux : ContextGetPath: Message: %lX - %s\n",fmid, Path));
     break;
 
   case EASYLINUX_TABLE:
-    elTable = (struct EasyLinuxTable *)object;
-    //break;
+    // elTable = (struct EasyLinuxTable *)object;
+    Path = talloc_strdup(mem_ctx,"?");
+    DEBUG(0, ("MAPIEasyLinux : ContextGetPath: Table: %lX - %s\n",fmid, Path));
+    break;
     
   default:
     DEBUG(0,("ERROR: MAPIEasyLinux - ContextGetPath: Unknown object type (%i)\n",elGeneric->stType));

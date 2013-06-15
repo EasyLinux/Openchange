@@ -65,6 +65,8 @@ _PUBLIC_ struct mapistore_context *mapistore_init(TALLOC_CTX *mem_ctx, struct lo
 		return NULL;
 	}
 
+  DEBUG(0, ("SNOEL: private directory is %s/mapistore \n",private_dir));
+  
 	mapping_path = talloc_asprintf(NULL, "%s/mapistore", private_dir);
 	mkdir(mapping_path, 0700);
 
@@ -130,6 +132,7 @@ _PUBLIC_ enum mapistore_error mapistore_release(struct mapistore_context *mstore
 	MAPISTORE_RETVAL_IF(!mstore_ctx, MAPISTORE_ERR_NOT_INITIALIZED, NULL);
 
 	DEBUG(5, ("freeing up mstore_ctx ref: %p\n", mstore_ctx));
+	DEBUG(0, ("SNOEL: Release mapistore ref: %p\n", mstore_ctx));
 
 	talloc_free(mstore_ctx->nprops_ctx);
 	talloc_free(mstore_ctx->processing_ctx);
@@ -204,19 +207,23 @@ _PUBLIC_ enum mapistore_error mapistore_add_context(struct mapistore_context *ms
 		return MAPISTORE_ERR_INVALID_NAMESPACE;
 	}
 
+  DEBUG(0,("SNOEL: AddContext namespace(%s)\n",namespace));
+  
 	if (namespace[1] && namespace[1] == '/' &&
 	    namespace[2] && namespace[2] == '/' &&
 	    namespace[3]) {
 		/* ensure the user mapistore directory exists before any mapistore operation occurs */
 		mapistore_dir = talloc_asprintf(mem_ctx, "%s/%s", mapistore_get_mapping_path(), owner);
 		mkdir(mapistore_dir, 0700);
-
+    DEBUG(0,("SNOEL: AddContext mkdir(%s)\n",mapistore_dir));
+    
 		mapistore_indexing_add(mstore_ctx, owner, &ictx);
 		/* mapistore_indexing_add_ref_count(ictx); */
 
 		backend_uri = talloc_strdup(mem_ctx, &namespace[3]);
 		namespace[3] = '\0';
 		retval = mapistore_backend_create_context(mstore_ctx, mstore_ctx->conn_info, ictx->index_ctx, namespace_start, backend_uri, fid, &backend_ctx);
+		DEBUG(0,("SNOEL: AddContext launch backent.create_context\n"));
 		if (retval != MAPISTORE_SUCCESS) {
 			return retval;
 		}
