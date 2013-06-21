@@ -139,6 +139,8 @@ for (i = 0; i < resultMsg->count; ++i)
     }
   }
 
+DEBUG(0,("MAPIEasyLinux :   URI: %s  DisplayName: %s  cn: %lX \n",elContext->RootFolder.Uri, elContext->RootFolder.displayName, elContext->RootFolder.FID));
+
 // Do whatever we need 
 switch( GetBkType(&elContext->RootFolder.Uri[12]) )  // Uri is EasyLinux://INBOX/...
   {
@@ -147,7 +149,7 @@ switch( GetBkType(&elContext->RootFolder.Uri[12]) )  // Uri is EasyLinux://INBOX
     break;
 
   case EASYLINUX_MAILDIR:
-    //OpenRootMailDir(elContext);
+    OpenRootMailDir(elContext);
     break;
     
   case EASYLINUX_CALENDAR:  

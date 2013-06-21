@@ -193,6 +193,8 @@ static init_backend_fn *load_backends(TALLOC_CTX *mem_ctx, const char *path)
 		}
 		
 		filename = talloc_asprintf(mem_ctx, "%s/%s", path, entry->d_name);
+		DEBUG(0,("SNOEL: LoadBackend %s\n",filename));
+		
 		ret[success] = load_backend(filename);
 		if (ret[success]) {
 			ret = talloc_realloc(mem_ctx, ret, init_backend_fn, success + 2);
@@ -403,7 +405,7 @@ enum mapistore_error mapistore_backend_create_root_folder(const char *username, 
 	for (i = 0; retval == MAPISTORE_ERR_NOT_FOUND && i < num_backends; i++) {
 		retval = backends[i].backend->backend.create_root_folder(username, ctx_role, fid, name, mem_ctx, mapistore_urip);
 	}
-
+  DEBUG(0,("SNOEL: CreateRootFolder %s \n", *mapistore_urip));
 	return retval;
 }
 
@@ -536,6 +538,7 @@ enum mapistore_error mapistore_backend_get_path(struct backend_context *bctx, TA
 	char			*bpath = NULL;
 
 	ret = bctx->backend->context.get_path(bctx->backend_object, mem_ctx, fmid, &bpath);
+	DEBUG(0,("SNOEL: GetPath %s \n",bpath));
 
 	if (!ret) {
 		*path = talloc_asprintf(mem_ctx, "%s%s", bctx->backend->backend.namespace, bpath);

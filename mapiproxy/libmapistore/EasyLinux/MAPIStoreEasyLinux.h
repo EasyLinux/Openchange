@@ -90,8 +90,8 @@ struct EasyLinuxProp {
 	
 	
 struct EasyLinuxContext {
-  enum EasyLinux_Struct_Type			stType;					// Type of structure used when a function send a void * 
-  enum EasyLinux_Backend_Type			bkType;					// Type of backstore -> INBOX, CALENDAR, ...
+  int															stType;					// Type of structure used when a function send a void * 
+  int															bkType;					// Type of backstore -> INBOX, CALENDAR, ...
   TALLOC_CTX 											*mem_ctx;				// Talloc memory context
   struct mapistore_context				*mstore_ctx;		// mapistore_context *   use for indexing search
   void														*bkContext;

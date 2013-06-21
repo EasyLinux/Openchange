@@ -43,6 +43,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <fcntl.h>
+#include <time.h>
 
 #define YES		1
 #define NO		0
@@ -118,12 +119,17 @@ static enum mapistore_error BackendCreateContext(TALLOC_CTX *mem_ctx,
                             const char *uri, void **context_object)
 {
 struct EasyLinuxContext *elContext;
+struct stat Stat;
 int Len;
+
 
 Len = strlen(indexingTdb->name);
 Len -= 12;
 
-//DEBUG(0, ("MAPIEasyLinux : Tdb %s\n", (char *)indexingTdb->name));  // /var/lib/samba/private/mapistore/Administrator/indexing.tdb
+// Comparer mtime de indexing.tdb aux reps
+stat(indexingTdb->name, &Stat); 
+DEBUG(0, ("MAPIEasyLinux : Tdb %i\n", Stat.st_mtime));  // time_t        st_mtime;    /* Heure dernière modification   */
+// /var/lib/samba/private/mapistore/Administrator/indexing.tdb
 
 // Initialise Backend structure
 elContext = (struct EasyLinuxContext *)talloc_zero_size(mem_ctx, sizeof(struct EasyLinuxContext) );
@@ -174,7 +180,7 @@ static enum mapistore_error BackendCreateRootFolder (const char *username,
 {
 // MAPISTORE_SUCCESS   MAPISTORE_ERR_NOT_IMPLEMENTED
 
-DEBUG(0, ("MAPIEasyLinux : BackendCreateRootFolder Role(%i) FID(%lX) Name(%s)\n",role, fid, name));
+DEBUG(0, ("NI MAPIEasyLinux : BackendCreateRootFolder Role(%i) FID(%lX) Name(%s)\n",role, fid, name));
 return MAPISTORE_ERR_NOT_IMPLEMENTED;
 }
 
@@ -301,10 +307,9 @@ switch( elGeneric->stType )
     // A Rootfolder doesn't have information into indexing.tdb
     DEBUG(0, ("MAPIEasyLinux : ContextGetPath: Context: %lX\n",fmid));
 
-    *path = NULL;
+    Path = NULL;
     // elContext = (struct EasyLinuxContext *)object;
-    return MAPISTORE_ERR_INVALID_NAMESPACE;
-    //return MAPISTORE_SUCCESS;
+    //return MAPISTORE_ERR_INVALID_NAMESPACE;
     break;
    
   case EASYLINUX_FOLDER:
@@ -388,7 +393,7 @@ return MAPISTORE_SUCCESS;
 static enum mapistore_error FolderOpen(void *parent_folder, TALLOC_CTX *mem_ctx, uint64_t fid, void **childfolder_object)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("MAPIEasyLinux : FolderOpen\n"));
+DEBUG(0, ("NI MAPIEasyLinux : FolderOpen\n"));
 return rc;
 }
 
@@ -511,7 +516,7 @@ return rc;
 static enum mapistore_error FolderDelete(void *folder_object)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("MAPIEasyLinux : FolderDelete\n"));
+DEBUG(0, ("NI MAPIEasyLinux : FolderDelete\n"));
 return rc;
 }
 
@@ -544,6 +549,7 @@ switch( elFolder->elContext->bkType )
     
   case EASYLINUX_MAILDIR:
     *rowCount = GetMaildirChildCount(elFolder, table_type);
+    DEBUG(0, ("MAPIEasyLinux : FolderGetChildCount for '%s' (%i)\n", elFolder->FullPath, *rowCount));
     break;
 
 	case EASYLINUX_CALENDAR:
@@ -590,7 +596,7 @@ static enum mapistore_error FolderOpenMessage(void *folder_object,
                          void **message_object)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("MAPIEasyLinux : FolderOpenMessage\n"));
+DEBUG(0, ("NI MAPIEasyLinux : FolderOpenMessage\n"));
 return rc;
 }
 
@@ -681,7 +687,7 @@ return MAPISTORE_SUCCESS;
 static enum mapistore_error FolderDeleteMessage(void *folder_object, uint64_t mid, uint8_t flags)
 {
 int rc=MAPISTORE_ERR_NOT_IMPLEMENTED;
-DEBUG(0, ("MAPIEasyLinux : FolderDeleteMessage\n"));
+DEBUG(0, ("NI MAPIEasyLinux : FolderDeleteMessage\n"));
 return rc;
 }
 

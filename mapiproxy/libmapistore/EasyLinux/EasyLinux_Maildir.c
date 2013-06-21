@@ -55,7 +55,8 @@
  * OpenMaildir 
  *
  * This function is called after a CreateContext, we have some work todo
- *   1 - open Maildir and scan to find New or Deleted items
+ *   1 - read last access of indexing.tdb -> means last access to Maildir datas with openchange
+ *   2 - compare LastAccessTime with Folders of Maildir
  *  
  int res =stat(srcfile,&file_prop); // informations fichier
 time_t date =file_prop.st_mtime;
@@ -71,16 +72,17 @@ File = talloc_asprintf(elContext->mem_ctx,"%s",&elContext->RootFolder.Uri[18]);
 
 // Fill in folder structure
 elContext->bkType = EASYLINUX_MAILDIR;
+elContext->bkType = EASYLINUX_BACKEND;
 elContext->RootFolder.stType = EASYLINUX_FOLDER;
 elContext->RootFolder.FolderType = 0; // FOLDER_ROOT
 elContext->RootFolder.RelPath = talloc_asprintf(elContext->mem_ctx,".%s",File);
-/*
+
 if( strcmp(elContext->RootFolder.RelPath,".") == 0 )
   {
   elContext->RootFolder.RelPath[0] = '/';
  	elContext->RootFolder.FullPath = talloc_asprintf(elContext->mem_ctx,"%s/Maildir/",elContext->User.homeDirectory);
   DEBUG(3,("MAPIEasyLinux:  Open INBOX Folder (%s)\n", elContext->RootFolder.FullPath));
- 	ListRootContent(elContext);
+ 	//ListRootContent(elContext);
  	}
 else
   {
@@ -88,8 +90,9 @@ else
   DEBUG(0,("MAPIEasyLinux : Open %s (%s) Folder\n", elContext->RootFolder.RelPath, elContext->RootFolder.FullPath));
  	//ListContent(elContext, false);
  	}
-*/ 	
-DEBUG(3, ("MAPIEasyLinux :   OpenMailDir(%s)\n", elContext->RootFolder.FullPath));  
+ 	
+DEBUG(0, ("MAPIEasyLinux :   OpenMailDir(%s)\n", elContext->RootFolder.RelPath));  
+DEBUG(0, ("MAPIEasyLinux :   OpenMailDir(%s)\n", elContext->RootFolder.FullPath));  
 
 // Test if Maildir !exist --> if no we have to create it
 
@@ -190,11 +193,6 @@ while ((dEMsg = readdir(dMsg)))
     }
   }
 talloc_unlink(elContext->mem_ctx, MsgFolder);
-
-
-
-
-
 
   
 dDir = opendir(elContext->RootFolder.FullPath);
