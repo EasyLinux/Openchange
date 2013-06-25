@@ -95,10 +95,10 @@ return MAPISTORE_SUCCESS;
 }
 
 /*
- * Initialise root folder
+ * \details Initialise root folder
  *
  * A context is linked to somewhat is a Folder, depending on information store,
- * we will use Xml, Ldap, MySql, or wathever needed.
+ * we will use tdb, Ldap, MySql, or wathever needed regarding to what we have to do
  * Each functionnal system is separated in EasyLinux_<type>.c
  *
  */
@@ -112,6 +112,7 @@ struct ldb_message_element *MessageElement;
 int i,j;
 
 DEBUG(0,("MAPIEasyLinux : InitialiseRootFolder\n")); 
+
 // We need to find link between URI and FID (64bits)
 Search = talloc_asprintf(mem_ctx,expression,uri);
 if( LDB_SUCCESS != ldb_search(ldb, mem_ctx, &resultMsg, NULL, LDB_SCOPE_DEFAULT, Attribs, "%s", Search) )
@@ -124,6 +125,7 @@ if( resultMsg->count == 0 )
   DEBUG(0, ("ERROR: MAPIEasyLinux - cannot link FID and MAPISToreName - No records found!\n"));
   return MAPISTORE_ERROR;
   }
+
 // Extract from record information
 for (i = 0; i < resultMsg->count; ++i) 
   {

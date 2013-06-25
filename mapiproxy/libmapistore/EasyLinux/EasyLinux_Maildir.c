@@ -57,20 +57,19 @@
  * This function is called after a CreateContext, we have some work todo
  *   1 - read last access of indexing.tdb -> means last access to Maildir datas with openchange
  *   2 - compare LastAccessTime with Folders of Maildir
- *  
- int res =stat(srcfile,&file_prop); // informations fichier
-time_t date =file_prop.st_mtime;
-struct tm* gmt=gmtime(&date); 
- 
+ *   
  
  */
 enum mapistore_error OpenRootMailDir(struct EasyLinuxContext *elContext)
 {
 char *File;
-// Uri   EasyLinux://INBOX/Sent
-File = talloc_asprintf(elContext->mem_ctx,"%s",&elContext->RootFolder.Uri[18]);
+File = talloc_asprintf(elContext->mem_ctx,"%s",&elContext->RootFolder.Uri[18]);  // Uri   EasyLinux://INBOX/Sent
 
-// Fill in folder structure
+// stat(elContext->Indexing->name, &Stat); 
+// DEBUG(0, ("MAPIEasyLinux : Tdb %i\n", Stat.st_mtime));  // time_t        st_mtime;    /* Heure dernière modification   */
+
+
+// Fill in folder structure 
 elContext->bkType = EASYLINUX_MAILDIR;
 elContext->bkType = EASYLINUX_BACKEND;
 elContext->RootFolder.stType = EASYLINUX_FOLDER;
@@ -82,7 +81,7 @@ if( strcmp(elContext->RootFolder.RelPath,".") == 0 )
   elContext->RootFolder.RelPath[0] = '/';
  	elContext->RootFolder.FullPath = talloc_asprintf(elContext->mem_ctx,"%s/Maildir/",elContext->User.homeDirectory);
   DEBUG(3,("MAPIEasyLinux:  Open INBOX Folder (%s)\n", elContext->RootFolder.FullPath));
- 	//ListRootContent(elContext);
+ 	ListINBOXContent(elContext);
  	}
 else
   {
@@ -104,10 +103,11 @@ return MAPISTORE_SUCCESS;
  * ListRootContent
  *
  * This function list items included in Root maildir 
- *
+ * we have to omit .Sent .Trash .Outbox and .Drafts  subfolders as these are accessed
+ * thru other RootFolder (on MAPI)
  *
  */
-void ListRootContent(struct EasyLinuxContext *elContext)
+void ListINBOXContent(struct EasyLinuxContext *elContext)
 {
 DIR *dDir, *dMsg;
 struct dirent *dEntry, *dEMsg;
@@ -115,8 +115,39 @@ char *SpecialNames[] = {".Sent",".Trash",".Outbox",".Drafts"};
 char *tmpName, *Uri, *MsgFolder, *MsgFullPath;
 int i, j, k, l, m, n, len, Ok, nSub, SoftDeleted, Res;  
 uint64_t  *FMID;
+struct stat Stat, dStat;
+
+
+stat(elContext->Indexing->name, &Stat); 
+DEBUG(0, ("MAPIEasyLinux :   Tdb %i\n", Stat.st_mtime));  // time_t        st_mtime;    /* Heure dernière modification   */
   
 len=4; // len=4 number of specials folders
+
+DEBUG(0,("MAPIEasyLinux :      Scan dirs in %s \n", elContext->RootFolder.FullPath));
+dMsg = opendir(elContext->RootFolder.FullPath);
+while ((dEntry = readdir(dMsg))) 
+  {
+  // We have to avoid non Maildir folders
+  Ok=1;
+  if ( (dEntry->d_type == isDir) && (dEntry->d_name[0] == '.') && (dEntry->d_name[1] != 0) && (dEntry->d_name[1] != '.') )
+    {
+    for(i=0 ; i<len ; i++)
+      {  // Maildir cannot Start with .Sent, .Trash, .Outbox or .Drafts because those are used in different backend
+      len = strlen(SpecialNames[i]);
+      if( !strncmp(SpecialNames[i], dEntry->d_name, len) )
+        Ok=0;
+      }
+    if( Ok )
+      {  // We found a Maildir folder in the form .Folder1.Folder2.Folder3
+      DEBUG(0,("MAPIEasyLinux :        Find %s \n", dEntry->d_name));
+      }
+    }
+  }
+return;
+
+
+
+
 
 // Scan for messages   in cur dir
 MsgFolder = (char *)talloc_asprintf(elContext->mem_ctx, "%scur", elContext->RootFolder.FullPath);

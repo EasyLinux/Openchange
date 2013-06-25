@@ -27,6 +27,7 @@
  * \date  2013-04-10
  *
  * Initialisation routines of OpenChange EasyLinux storage backend.
+ * This file is the entry point of backend functions
  *
  */
 
@@ -97,7 +98,8 @@ return MAPISTORE_SUCCESS;
 /**
  * \details Create a connection context to the backend
  *
- * This is the function called when we are creating a context (see Contexts subsection). Its prototype uses the following parameters:
+ * This is the function called when we are creating a context (see Contexts subsection). 
+ * Its prototype uses the following parameters:
  *
  * \param mem_ctx               TALLOC_CTX 		Pointer to the memory context used for this backend. This is the memory context you need to use 
  *                              							to allocate memory for your specific backend's context structure and for which you may want to set 
@@ -119,16 +121,16 @@ static enum mapistore_error BackendCreateContext(TALLOC_CTX *mem_ctx,
                             const char *uri, void **context_object)
 {
 struct EasyLinuxContext *elContext;
-struct stat Stat;
 int Len;
 
+DEBUG(0, ("MAPIEasyLinux : Creating context Uri:%s \n",uri ));  
 
 Len = strlen(indexingTdb->name);
 Len -= 12;
 
 // Comparer mtime de indexing.tdb aux reps
-stat(indexingTdb->name, &Stat); 
-DEBUG(0, ("MAPIEasyLinux : Tdb %i\n", Stat.st_mtime));  // time_t        st_mtime;    /* Heure dernière modification   */
+// stat(elContext->Indexing->name, &Stat); 
+// DEBUG(0, ("MAPIEasyLinux : Tdb %i\n", Stat.st_mtime));  // time_t        st_mtime;    /* Heure dernière modification   */
 // /var/lib/samba/private/mapistore/Administrator/indexing.tdb
 
 // Initialise Backend structure
@@ -187,9 +189,17 @@ return MAPISTORE_ERR_NOT_IMPLEMENTED;
 /**
  * \details 
  *
- * This function is part of the auto-provisioning process available in OpenChange 1.0. It is called by 
- * OpenChange server to query the MAPIStore URI for the backend available for specified user. Its prototype 
- * uses the following parameters:
+ * This function is start of Backend system, this function is part of the auto-provisioning 
+ * process available in OpenChange 1.0. It is called by OpenChange server to query the 
+ * MAPIStore URI for the backend available for specified user.
+ *
+ *  - when a user first connect to Openchange server, this function allows auto-provisionning.
+ *    Backend should create list (if no initialisation process is needed) of all the context that 
+ *    will be available to user
+ *  - on further connections, list all contexts that exists for a existing user. (Context could 
+ *    have been created thru backendCreateContext and then must be added to default ones
+ *      
+ * Its prototype uses the following parameters:
  *
  * \param *username       		const char				Username.  
  * \param *indexingTdb      	struct tdb_wrap 	a pointer to the wrapped TDB database (sort of hash table) which 
@@ -216,9 +226,12 @@ enum mapistore_context_role  Roles[]= {MAPISTORE_MAIL_ROLE, 	MAPISTORE_DRAFTS_RO
                      MAPISTORE_CONTACTS_ROLE, MAPISTORE_TASKS_ROLE, MAPISTORE_NOTES_ROLE, MAPISTORE_JOURNAL_ROLE,
                      MAPISTORE_FALLBACK_ROLE, MAPISTORE_MAX_ROLES };
 
+// With EasyLinux backend, we proceed slighty different we will auto-provision only on CreateContext because we need 
+// access to AD to retreive homeDirectory
+// We begin by designing all the 'Native' RootFolders 
 ContextOld = NULL;
 ContextNew = NULL;
-for( i=0 ; i < 12 ; i++ )
+for( i=0 ; i < 12 ; i++ )  // 12 represents the 'native' roles
   {
 	if( i == 0 )
 	  {
@@ -243,8 +256,9 @@ for( i=0 ; i < 12 ; i++ )
 	else
 		Context->next					= NULL;
 	}
-
-DEBUG(3, ("MAPIEasyLinux : BackendListContexts %s done! \n",username));
+// Parcourrir indexing.tdb à la recherche de FALLBACK
+//DEBUG(0, ("MAPIEasyLinux : %s \n",indexingTdb->name));
+DEBUG(0, ("MAPIEasyLinux : BackendListContexts for %s done! \n",username));
 return rc;
 }
 

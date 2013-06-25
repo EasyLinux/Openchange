@@ -475,7 +475,7 @@ _PUBLIC_ enum mapistore_error mapistore_create_root_folder(const char *username,
 	/* Sanity checks */
 	MAPISTORE_RETVAL_IF(!username, MAPISTORE_ERR_INVALID_PARAMETER, NULL);
 	MAPISTORE_RETVAL_IF(!mapistore_urip, MAPISTORE_ERR_INVALID_PARAMETER, NULL);
-
+  DEBUG(0,("SNOEL: CreateRootFolder %s \n",name));
 	return mapistore_backend_create_root_folder(username, ctx_role, fid, name, mem_ctx, mapistore_urip);
 }
 

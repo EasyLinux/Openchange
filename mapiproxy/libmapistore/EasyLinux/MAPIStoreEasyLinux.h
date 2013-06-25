@@ -172,7 +172,7 @@ int  GetJournal(struct EasyLinuxFolder *);
  * EasyLinux_Maildir functions
  */
 enum mapistore_error OpenRootMailDir(struct EasyLinuxContext *);
-void ListRootContent(struct EasyLinuxContext *);
+void ListINBOXContent(struct EasyLinuxContext *);
 
 int OmmitSpecialFolder(struct EasyLinuxFolder *, char *);
 int GetMaildirChildCount(struct EasyLinuxFolder *, uint32_t);

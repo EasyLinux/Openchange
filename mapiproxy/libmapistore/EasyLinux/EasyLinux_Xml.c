@@ -32,6 +32,7 @@
 
 #include "mapiproxy/libmapistore/mapistore.h"
 #include "mapiproxy/libmapistore/mapistore_errors.h"
+#include "mapiproxy/libmapistore/mapistore_private.h"
 #include "mapiproxy/libmapistore/EasyLinux/MAPIStoreEasyLinux.h"
 #include <talloc.h>
 #include <core/ntstatus.h>
@@ -68,10 +69,15 @@ int OpenFallBack(struct EasyLinuxContext *elContext)
 char *Path, *File;
 int  hFile, i;
 DIR *dPath;
+struct tdb_context *tFallBack;
+TDB_DATA	key, dbuf;
+
+
+
 
 // Find path and tdb file name
-Path = talloc_asprintf(elContext->mem_ctx,"%s/Maildir/%s\n",elContext->User.homeDirectory, &elContext->RootFolder.Uri[12]);
-File = talloc_asprintf(elContext->mem_ctx,"%stdb",&elContext->RootFolder.Uri[21]);
+Path = talloc_asprintf(elContext->mem_ctx,"%s/Maildir/FALLBACK/%s.tdb\n",elContext->User.homeDirectory, elContext->RootFolder.displayName);
+File = talloc_asprintf(elContext->mem_ctx,"%s",&elContext->RootFolder.Uri[21]);  // elContext->RootFolder.displayName &elContext->RootFolder.Uri[21]
 i=0;
 while( File[i] )
   {
@@ -80,25 +86,66 @@ while( File[i] )
   i++;
   }
 
-//DEBUG(0, ("MAPIEasyLinux : --> Path %s\n",Path));
-//DEBUG(0, ("MAPIEasyLinux : --> File %s\n",File));  // FALLBACK/0x2802000000000001/
+// Try to open Path - /home/NET6A/Administrator/Maildir/FALLBACK/Finder.tdb
+hFile = open(Path, O_RDONLY);
+if( hFile == ENOENT )
+  { 
+  tFallBack = tdb_open( Path, 0, TDB_NOLOCK, O_RDWR, 0660);
+	// Add the record given its fid and mapistore_uri 
+	key.dptr = (unsigned char *) talloc_asprintf(elContext->mem_ctx, "%s", &elContext->RootFolder.Uri[21]);
+	key.dsize = strlen((const char *) key.dptr);
+
+	dbuf.dptr = (unsigned char *) talloc_strdup(elContext->mem_ctx, Path);
+	dbuf.dsize = strlen((const char *) dbuf.dptr);
+
+	tdb_store(tFallBack, key, dbuf, TDB_INSERT);
+	
+	talloc_free(key.dptr);
+	talloc_free(dbuf.dptr);
   
-// Test if directory exist
+  tdb_close(tFallBack);
+  
+  // We need to add in indexing.tdb
+	key.dptr = (unsigned char *) talloc_asprintf(elContext->mem_ctx, "%lX", elContext->RootFolder.FID);
+	key.dsize = strlen((const char *) key.dptr);
+
+	dbuf.dptr = (unsigned char *) talloc_strdup(elContext->mem_ctx, elContext->RootFolder.Uri);
+	dbuf.dsize = strlen((const char *) dbuf.dptr);
+
+	tdb_store(elContext->Indexing, key, dbuf, TDB_INSERT);
+  //mapistore_indexing_record_add(elContext->mem_ctx, elContext->Indexing, elContext->RootFolder.FID, elContext->RootFolder.Uri);
+	talloc_free(key.dptr);
+	talloc_free(dbuf.dptr);
+  }
+else
+  { // File exist
+  close(hFile);
+  }
+   
+DEBUG(0, ("MAPIEasyLinux :   --> Create %s \n",Path));
+DEBUG(0, ("MAPIEasyLinux :   --> AddRecord(%s) \n",&elContext->RootFolder.Uri[21]));
+DEBUG(0, ("MAPIEasyLinux :   --> Close %s \n",Path));
+DEBUG(0, ("MAPIEasyLinux :   --> indexing.tdb AddRecord(%s, %s) %s\n",&elContext->RootFolder.Uri[21], Path));  // FALLBACK/0x2802000000000001/
+  
+/* Test if directory exist
 dPath = opendir(Path);  
 if( dPath == NULL )
   RecursiveMkDir(&elContext->User, Path, 0770);  // Create dir
 else
   closedir(dPath);
-
+*/
 elContext->bkType = EASYLINUX_FALLBACK;
 elContext->RootFolder.stType = EASYLINUX_FOLDER;
-elContext->RootFolder.RelPath = File;
+elContext->RootFolder.RelPath = talloc_asprintf(elContext->mem_ctx,"%s.tdb",elContext->RootFolder.displayName);
 elContext->RootFolder.FolderType = 0; // FOLDER_ROOT
-elContext->RootFolder.FullPath = talloc_asprintf(elContext->mem_ctx,"%s%s",Path, File);
+elContext->RootFolder.FullPath = Path;
 
-talloc_unlink(elContext->mem_ctx, Path);
+talloc_unlink(elContext->mem_ctx, File);
 return MAPISTORE_SUCCESS;
 }
+
+
+
 
 /*
  * Close xml file, if needed save actual memory
@@ -200,7 +247,7 @@ return 0;
 
 /*
  * Create an empty Xml file
- */ 
+ *
 int CreateXmlFile(struct EasyLinuxContext *elContext)
 {
 xmlDocPtr  doc = NULL;       	// document pointer 
@@ -228,5 +275,5 @@ xmlMemoryDump();
 
 talloc_unlink(elContext->mem_ctx, sFID);
 return(0);
-}
+} */
 
