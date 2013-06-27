@@ -127,7 +127,7 @@ int mapistore_init_backend(void);
  * EasyLinux_Common functions
  */
 enum EasyLinux_Backend_Type GetBkType(char *);
-int RecursiveMkDir(struct EasyLinuxUser *, char *, mode_t);
+int RecursiveMkDir(char *, char *, int, int, mode_t);
 void Dump(void *);
 void StorePropertie(struct EasyLinuxTable *, struct SPropValue);
   	
@@ -182,7 +182,18 @@ char *ImapToMaildir(TALLOC_CTX *, char *);
 /*
  *  EasyLinux_Xml functions
  */
+int CreateContextsXml(TALLOC_CTX *mem_ctx, char *XmlFile); 
+int ListContextsFromXml(TALLOC_CTX *mem_ctx, char *XmlFile, struct mapistore_contexts_list **Listp); 
+int AddXmlContext( TALLOC_CTX *mem_ctx, char *XmlFile, char *ContextName, char *Main, char *Url,  char *Tag, int Role); 
+ 
+ 
+ 
 int OpenFallBack(struct EasyLinuxContext *);
+
+
+
+
+
 int CreateXmlFile(struct EasyLinuxContext *);
 int SaveMessageXml(struct EasyLinuxMessage *, TALLOC_CTX *);
 int CloseXml(struct EasyLinuxContext *);

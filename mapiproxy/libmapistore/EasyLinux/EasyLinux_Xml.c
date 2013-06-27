@@ -26,7 +26,8 @@
  * \version 0.1
  * \date  2013-04-10
  *
- * Routines parts for Maildir access
+ * Functions regarding Xml files
+ * NB: Xml file is used to keep trace of Context for user
  *
  */
 
@@ -53,95 +54,211 @@
 #define isFile 0x8
 #define isDir  0x4
 
-struct XmlBackend {
-  xmlDocPtr 	XmlDoc;
-  int					NotSaved;   // 0 means Xml file updated,  1 means Xml file need to be updated
-  };
 
 /*
- * Open .tdb root file
+ * \detail  Create Contexts.xml file for a user
  *
- * tdb files are used for FALLBACK entries, this function try to open <homedir>/Maildir/FALLBACK/<FID>/<FID>.tdb
- * (if .tdb doesn't exist -> create it)
+ * This function is called once on first backend launch,
+ * the function defines main contexts used by Openchange
+ *
+ * \param *mem_ctx						memory context
+ * \param *ContextsXml				fullname of Xml file to create
  */
-int OpenFallBack(struct EasyLinuxContext *elContext)
+int CreateContextsXml(TALLOC_CTX *mem_ctx, char *ContextsXml)
 {
-char *Path, *File;
-int  hFile, i;
-DIR *dPath;
-struct tdb_context *tFallBack;
-TDB_DATA	key, dbuf;
+xmlDocPtr 	doc = NULL;       	// document pointer 
+xmlNodePtr 	root_node = NULL, context_node = NULL;		// node pointers 
+int i;
+char *Url, *iRole;
+char *ContextRole[] = {"INBOX","INBOX/Drafts", "INBOX/Sent", "INBOX/Outbox","INBOX/Trash","CALENDAR","CONTACTS","TASKS",
+                     "NOTES","JOURNAL","FALLBACK","MAX"};
+char *NameRole[] = {"Inbox","Drafts", "Sent", "Outbox","Trash","Calendar","Contacts","Tasks",
+                     "Notes","Journal","Fallback","Max"};
+enum mapistore_context_role  Roles[]= {MAPISTORE_MAIL_ROLE, 	MAPISTORE_DRAFTS_ROLE, 	MAPISTORE_SENTITEMS_ROLE,
+                     MAPISTORE_OUTBOX_ROLE, MAPISTORE_DELETEDITEMS_ROLE, MAPISTORE_CALENDAR_ROLE,
+                     MAPISTORE_CONTACTS_ROLE, MAPISTORE_TASKS_ROLE, MAPISTORE_NOTES_ROLE, MAPISTORE_JOURNAL_ROLE,
+                     MAPISTORE_FALLBACK_ROLE, MAPISTORE_MAX_ROLES };
 
+// Creates a new document, a node and set it as a root node
+doc = xmlNewDoc(BAD_CAST "1.0");
+root_node = xmlNewNode(NULL, BAD_CAST "Contexts");
+xmlDocSetRootElement(doc, root_node);
 
-
-
-// Find path and tdb file name
-Path = talloc_asprintf(elContext->mem_ctx,"%s/Maildir/FALLBACK/%s.tdb\n",elContext->User.homeDirectory, elContext->RootFolder.displayName);
-File = talloc_asprintf(elContext->mem_ctx,"%s",&elContext->RootFolder.Uri[21]);  // elContext->RootFolder.displayName &elContext->RootFolder.Uri[21]
-i=0;
-while( File[i] )
+for(i=0 ; i<12 ; i++ )
   {
-  if( File[i] == '/' )
-    File[i] = '.';
-  i++;
+  context_node = xmlNewChild(root_node, NULL, BAD_CAST "Context", NULL);  
+  xmlSetProp(context_node, BAD_CAST "name", BAD_CAST NameRole[i]);
+  xmlNewChild(context_node, NULL, BAD_CAST "Main", BAD_CAST "true");
+  Url = talloc_asprintf(mem_ctx,"EasyLinux://%s",ContextRole[i]);
+  xmlNewChild(context_node, NULL, BAD_CAST "Url", BAD_CAST Url);
+  talloc_free(Url);
+  xmlNewChild(context_node, NULL, BAD_CAST "Tag", BAD_CAST "tag");  
+  iRole = talloc_asprintf(mem_ctx,"%i",Roles[i]);
+  xmlNewChild(context_node, NULL, BAD_CAST "Role", BAD_CAST iRole);  
+  talloc_free(iRole);
   }
 
-// Try to open Path - /home/NET6A/Administrator/Maildir/FALLBACK/Finder.tdb
-hFile = open(Path, O_RDONLY);
-if( hFile == ENOENT )
-  { 
-  tFallBack = tdb_open( Path, 0, TDB_NOLOCK, O_RDWR, 0660);
-	// Add the record given its fid and mapistore_uri 
-	key.dptr = (unsigned char *) talloc_asprintf(elContext->mem_ctx, "%s", &elContext->RootFolder.Uri[21]);
-	key.dsize = strlen((const char *) key.dptr);
+// Dumping document to file
+xmlSaveFormatFileEnc(ContextsXml, doc, "UTF-8", 1);
+xmlFreeDoc(doc);
+xmlCleanupParser();
+xmlMemoryDump();
 
-	dbuf.dptr = (unsigned char *) talloc_strdup(elContext->mem_ctx, Path);
-	dbuf.dsize = strlen((const char *) dbuf.dptr);
+return MAPISTORE_SUCCESS;
+}
 
-	tdb_store(tFallBack, key, dbuf, TDB_INSERT);
-	
-	talloc_free(key.dptr);
-	talloc_free(dbuf.dptr);
-  
-  tdb_close(tFallBack);
-  
-  // We need to add in indexing.tdb
-	key.dptr = (unsigned char *) talloc_asprintf(elContext->mem_ctx, "%lX", elContext->RootFolder.FID);
-	key.dsize = strlen((const char *) key.dptr);
 
-	dbuf.dptr = (unsigned char *) talloc_strdup(elContext->mem_ctx, elContext->RootFolder.Uri);
-	dbuf.dsize = strlen((const char *) dbuf.dptr);
+/*
+ * 
+ */
+int AddXmlContext(TALLOC_CTX *mem_ctx, char *XmlFile, char *ContextName, char *Main, char *Url,  char *Tag, int Role)
+{
+xmlDocPtr xmldoc = NULL;
+xmlNodePtr root_node, context_node;
+char *iRole;
 
-	tdb_store(elContext->Indexing, key, dbuf, TDB_INSERT);
-  //mapistore_indexing_record_add(elContext->mem_ctx, elContext->Indexing, elContext->RootFolder.FID, elContext->RootFolder.Uri);
-	talloc_free(key.dptr);
-	talloc_free(dbuf.dptr);
-  }
-else
-  { // File exist
-  close(hFile);
+xmldoc = xmlParseFile(XmlFile);
+root_node = xmlDocGetRootElement(xmldoc);
+context_node = xmlNewChild(root_node, NULL, BAD_CAST "Context", NULL);  
+xmlSetProp(context_node, BAD_CAST "name", BAD_CAST ContextName);
+xmlNewChild(context_node, NULL, BAD_CAST "Main", BAD_CAST Main);
+xmlNewChild(context_node, NULL, BAD_CAST "Url", BAD_CAST Url);
+xmlNewChild(context_node, NULL, BAD_CAST "Tag", BAD_CAST Tag);  
+iRole = talloc_asprintf(mem_ctx,"%i",Role);
+xmlNewChild(context_node, NULL, BAD_CAST "Role", BAD_CAST iRole);  
+talloc_free(iRole);
+
+// Dumping document to file
+xmlSaveFormatFileEnc(XmlFile, xmldoc, "UTF-8", 1);
+xmlFreeDoc(xmldoc);
+xmlCleanupParser();
+xmlMemoryDump();
+
+return MAPISTORE_SUCCESS;
+}
+
+/*
+ * \detail List Context for user
+ * This function is called during backend initialization, 
+ * when a user has been already connected, he has a Contexts.xml in his MAPI personnal folder.
+ * This function opens the file and fill the mapistore_contexts_list structure with relevant 
+ * datas
+ *
+ * \param *mem_ctx						memory context
+ * \param *XmlFile  					fullname of Xml file to open
+ * \param **contexts_listp		context list returned by the function
+ */
+int ListContextsFromXml(TALLOC_CTX *mem_ctx, char *XmlFile, struct mapistore_contexts_list **contexts_listp)
+{
+xmlDocPtr xmldoc = NULL;
+xmlNodePtr racine;
+xmlNodePtr n, m;
+xmlChar *cName, *Content;
+struct mapistore_contexts_list *Context, *PrevContext;
+
+
+xmldoc = xmlParseFile(XmlFile);
+if (!xmldoc)
+  {
+  DEBUG(0, ("ERROR - MAPIEasyLinux : can't open xml file '%s' \n",XmlFile));
+  return MAPISTORE_ERR_BACKEND_INIT;
   }
    
-DEBUG(0, ("MAPIEasyLinux :   --> Create %s \n",Path));
-DEBUG(0, ("MAPIEasyLinux :   --> AddRecord(%s) \n",&elContext->RootFolder.Uri[21]));
-DEBUG(0, ("MAPIEasyLinux :   --> Close %s \n",Path));
-DEBUG(0, ("MAPIEasyLinux :   --> indexing.tdb AddRecord(%s, %s) %s\n",&elContext->RootFolder.Uri[21], Path));  // FALLBACK/0x2802000000000001/
-  
-/* Test if directory exist
-dPath = opendir(Path);  
-if( dPath == NULL )
-  RecursiveMkDir(&elContext->User, Path, 0770);  // Create dir
-else
-  closedir(dPath);
-*/
-elContext->bkType = EASYLINUX_FALLBACK;
-elContext->RootFolder.stType = EASYLINUX_FOLDER;
-elContext->RootFolder.RelPath = talloc_asprintf(elContext->mem_ctx,"%s.tdb",elContext->RootFolder.displayName);
-elContext->RootFolder.FolderType = 0; // FOLDER_ROOT
-elContext->RootFolder.FullPath = Path;
+// Get to xml root
+racine = xmlDocGetRootElement(xmldoc);
+if (racine == NULL) 
+  {
+  DEBUG(0, ("ERROR - MAPIEasyLinux : Document XML is empty !\n"));
+  xmlFreeDoc(xmldoc);
+  return MAPISTORE_ERR_BACKEND_INIT;
+  }
+DEBUG(0 ,("MAPIEasyLinux :     --> %s\n", racine->name));
 
-talloc_unlink(elContext->mem_ctx, File);
+// Scan contexts
+PrevContext = NULL;
+for (n = racine->children; n != NULL; n = n->next) 
+  { 
+  if( n->type == XML_ELEMENT_NODE)
+    {
+    Context = (struct mapistore_contexts_list *)talloc_zero_size(mem_ctx, sizeof(struct mapistore_contexts_list) );
+  	Context->prev	= PrevContext;
+
+  	if( PrevContext != NULL )
+  	  PrevContext->next = Context;
+  	else
+  	  *contexts_listp = Context;
+  	  
+  	PrevContext = Context;  // Prepare for next Context
+  	Context->next	= NULL;
+  	
+  	// retrieve informations and fill structure
+    cName = xmlGetProp(n, (const xmlChar*)"name");
+    Context->name	= talloc_strdup(mem_ctx, (char *)cName);
+    DEBUG(0 ,("MAPIEasyLinux :       --> %s\n", cName));
+    for( m = n->children ; m != NULL ; m = m->next )
+      {
+      if( m->type == XML_ELEMENT_NODE )
+        {
+        Content = xmlNodeGetContent(m);
+        if( strcmp((char *)m->name,"Url") == 0 )
+          Context->url 				 		= talloc_strdup(mem_ctx,(char *)Content);
+        if( (strcmp((char *)m->name,"Main") == 0) && (strcmp((char *)Content, "true") == 0) )
+          Context->main_folder 		= true;
+        if( (strcmp((char *)m->name,"Main") == 0) && (strcmp((char *)Content, "true") != 0) )
+          Context->main_folder 		= false;
+        if( strcmp((char *)m->name,"Tag") == 0 )
+          Context->tag 				 		= talloc_strdup(mem_ctx,(char *)Content);
+        if( strcmp((char *)m->name,"Role") == 0 )
+          Context->role 				 		= atoi((char *)Content);
+        DEBUG(0, ("MAPIEasyLinux :        --> %s - %s\n", m->name, Content));
+        xmlFree(Content);
+        }
+      }
+    xmlFree(cName);
+    }
+  }
+
+xmlFreeDoc (xmldoc);
 return MAPISTORE_SUCCESS;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+int SaveMessageXml(struct EasyLinuxMessage *elMessage, TALLOC_CTX *mem_ctx)
+{
+int i;
+DEBUG(0, ("MAPIEasyLinux : Saving XML Message\n"));
+DEBUG(0, ("MAPIEasyLinux :     MID: %lX\n",elMessage->MID));
+DEBUG(0, ("MAPIEasyLinux :     Folder: %s\n",elMessage->Parent->RelPath));
+DEBUG(0, ("MAPIEasyLinux :     File: %s\n",elMessage->Parent->FullPath));
+DEBUG(0, ("MAPIEasyLinux :     Table with %i records\n",elMessage->Table->rowCount));
+
+return 0;
 }
 
 
@@ -149,7 +266,7 @@ return MAPISTORE_SUCCESS;
 
 /*
  * Close xml file, if needed save actual memory
- */
+ *
 int CloseXml(struct EasyLinuxContext *elContext)
 {
 struct XmlBackend  *elXml;
@@ -170,14 +287,7 @@ return MAPISTORE_SUCCESS;
 
 
 
-int SaveMessageXml(struct EasyLinuxMessage *elMessage, TALLOC_CTX *mem_ctx)
-{
-int i;
-DEBUG(0, ("MAPIEasyLinux : Saving XML Message\n"));
-DEBUG(0, ("MAPIEasyLinux :     MID: %lX\n",elMessage->MID));
-DEBUG(0, ("MAPIEasyLinux :     Folder: %s\n",elMessage->Parent->RelPath));
-DEBUG(0, ("MAPIEasyLinux :     File: %s\n",elMessage->Parent->FullPath));
-DEBUG(0, ("MAPIEasyLinux :     Table with %i records\n",elMessage->Table->rowCount));
+
 for(i=0 ; i<elMessage->Table->rowCount ; i++)
   {
   DEBUG(0, ("MAPIEasyLinux :         0x%08X: %s\n",elMessage->Table->Props[i]->PropTag, elMessage->Table->Props[i]->PropValue));
@@ -188,8 +298,6 @@ for(i=0 ; i<elMessage->Table->rowCount ; i++)
 
 
 
-
-/*
 xmlDocPtr doc = NULL;       	// document pointer 
 xmlNodePtr root_node = NULL;	// node pointers 
 
@@ -241,11 +349,11 @@ xmlCleanupParser();
 xmlMemoryDump();
 
 talloc_unlink(elContext->mem_ctx, sFID);
-*/
+
 return 0;
 }
 
-/*
+*
  * Create an empty Xml file
  *
 int CreateXmlFile(struct EasyLinuxContext *elContext)

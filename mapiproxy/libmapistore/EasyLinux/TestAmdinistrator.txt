@@ -1,0 +1,164 @@
+# record 1
+dn: CN=1729382256910270465,CN=1513209474796486657,CN=Administrator,CN=First Administrative Group,CN=First Organization,CN=OPENCHANGE,DC=net6a,DC=lan
+cn: 1729382256910270465
+MAPIStoreURI: EasyLinux://INBOX/Sent/
+PidTagFolderId: 0x18000000000000001
+PidTagParentFolderId: 0x15000000000000001 - 1513209474796486657
+PidTagDisplayName: Sent
+PidTagContainerClass: IPF.Note
+
+# record 5
+dn: CN=289356276058554369,CN=Administrator,CN=First Administrative Group,CN=First Organization,CN=OPENCHANGE,DC=net6a,DC=lan
+cn: 289356276058554369 - 0x404000000000001
+MAPIStoreURI: EasyLinux://FALLBACK/0x404000000000001/
+PidTagFolderId: 289356276058554369
+PidTagParentFolderId: 0x404000000000001
+PidTagDisplayName: Freebusy Data
+
+# record 6
+dn: CN=1657324662872342529,CN=1513209474796486657,CN=Administrator,CN=First Administrative Group,CN=First Organization,CN=OPENCHANGE,DC=net6a,DC=lan
+cn: 1657324662872342529 - 0x17000000000000001
+MAPIStoreURI: EasyLinux://INBOX/Outbox/
+PidTagFolderId: 0x17000000000000001
+PidTagParentFolderId: 0x15000000000000001 - 1513209474796486657
+PidTagDisplayName: Outbox
+PidTagContainerClass: IPF.Note
+
+# record 7
+dn: CN=1441151880758558721,CN=Administrator,CN=First Administrative Group,CN=First Organization,CN=OPENCHANGE,DC=net6a,DC=lan
+cn: 0x14000000000000001 - 1441151880758558721
+PidTagFolderId: 1441151880758558721
+PidTagParentFolderId: 720575940379279361
+PidTagDisplayName: Tracked Mail Processing
+PidTagContainerClass: IPF.Note
+
+# record 10
+dn: CN=1945555039024054273,CN=1513209474796486657,CN=Administrator,CN=First Administrative Group,CN=First Organization,CN=OPENCHANGE,DC=net6a,DC=lan
+cn: 1945555039024054273
+MAPIStoreURI: EasyLinux://CALENDAR/
+PidTagFolderId: 1945555039024054273
+PidTagParentFolderId: 1513209474796486657
+PidTagDisplayName: Calendar
+PidTagContainerClass: IPF.Appointment
+
+# record 12
+dn: CN=1369094286720630785,CN=Administrator,CN=First Administrative Group,CN=First Organization,CN=OPENCHANGE,DC=net6a,DC=lan
+cn: 1369094286720630785
+PidTagFolderId: 1369094286720630785
+PidTagParentFolderId: 720575940379279361
+PidTagDisplayName: To-Do
+PidTagContainerClass: IPF.Task
+
+# record 15
+dn: CN=1585267068834414593,CN=1513209474796486657,CN=Administrator,CN=First Administrative Group,CN=First Organization,CN=OPENCHANGE,DC=net6a,DC=lan
+cn: 1585267068834414593
+MAPIStoreURI: EasyLinux://INBOX/
+PidTagFolderId: 1585267068834414593
+PidTagParentFolderId: 1513209474796486657
+PidTagDisplayName: Inbox
+PidTagContainerClass: IPF.Note
+PidTagMessageClass: All
+PidTagMessageClass: IPM
+PidTagMessageClass: Report.IPM
+PidTagIpmDraftsEntryId: AAAAAJwvJ1E1Xn5NpjnGQ+jQ5gMBAG+QWvjXFMJIkcL8uDW+WhEAAA AAABoAAA==
+PidTagIpmAppointmentEntryId: AAAAAJwvJ1E1Xn5NpjnGQ+jQ5gMBAG+QWvjXFMJIkcL8uDW+W hEAAAAAABsAAA==
+PidTagIpmContactEntryId: AAAAAJwvJ1E1Xn5NpjnGQ+jQ5gMBAG+QWvjXFMJIkcL8uDW+WhEAA AAAABwAAA==
+PidTagIpmTaskEntryId: AAAAAJwvJ1E1Xn5NpjnGQ+jQ5gMBAG+QWvjXFMJIkcL8uDW+WhEAAAAA AB0AAA==
+PidTagIpmNoteEntryId: AAAAAJwvJ1E1Xn5NpjnGQ+jQ5gMBAG+QWvjXFMJIkcL8uDW+WhEAAAAA AB4AAA==
+PidTagIpmJournalEntryId: AAAAAJwvJ1E1Xn5NpjnGQ+jQ5gMBAG+QWvjXFMJIkcL8uDW+WhEAA AAAAB8AAA==
+PidTagRemindersOnlineEntryId: AAAAAJwvJ1E1Xn5NpjnGQ+jQ5gMBAG+QWvjXFMJIkcL8uDW+  WhEAAAAAABIAAA==
+
+# record 18
+dn: CN=1297036692682702849,CN=Administrator,CN=First Administrative Group,CN=First Organization,CN=OPENCHANGE,DC=net6a,DC=lan
+cn: 1297036692682702849
+PidTagFolderId: 1297036692682702849
+PidTagParentFolderId: 720575940379279361
+PidTagDisplayName: Reminders
+PidTagContainerClass: Outlook.Reminder
+
+# record 20
+dn: CN=1873497444986126337,CN=1513209474796486657,CN=Administrator,CN=First Administrative Group,CN=First Organization,CN=OPENCHANGE,DC=net6a,DC=lan
+cn: 1873497444986126337
+MAPIStoreURI: EasyLinux://INBOX/Drafts/
+PidTagFolderId: 1873497444986126337
+PidTagParentFolderId: 1513209474796486657
+PidTagDisplayName: Drafts
+PidTagContainerClass: IPF.Note
+
+# record 21
+dn: CN=Administrator,CN=First Administrative Group,CN=First Organization,CN=OPENCHANGE,DC=net6a,DC=lan
+cn: Administrator
+MailboxGUID: 51272f9c-5e35-4d7e-a639-c643e8d0e603
+objectClass: systemfolder
+PidTagDisplayName: OpenChange Mailbox: Administrator
+PidTagFolderId: 720575940379279361
+
+# record 22
+dn: CN=217298682020626433,CN=Administrator,CN=First Administrative Group,CN=First Organization,CN=OPENCHANGE,DC=net6a,DC=lan
+cn: 217298682020626433
+MAPIStoreURI: EasyLinux://FALLBACK/0x304000000000001/
+PidTagFolderId: 217298682020626433
+PidTagParentFolderId: 720575940379279361
+PidTagDisplayName: Shortcuts
+
+# record 24
+dn: CN=1513209474796486657,CN=Administrator,CN=First Administrative Group,CN=First Organization,CN=OPENCHANGE,DC=net6a,DC=lan
+cn: 1513209474796486657
+PidTagFolderId: 1513209474796486657
+PidTagParentFolderId: 720575940379279361
+PidTagDisplayName: Top of Information Store
+
+# record 27
+dn: CN=2161727821137838081,CN=1513209474796486657,CN=Administrator,CN=First Administrative Group,CN=First Organization,CN=OPENCHANGE,DC=net6a,DC=lan
+cn: 2161727821137838081
+MAPIStoreURI: EasyLinux://NOTES/
+PidTagFolderId: 2161727821137838081
+PidTagParentFolderId: 1513209474796486657
+PidTagDisplayName: Notes
+PidTagContainerClass: IPF.StickyNote
+
+# record 32
+dn: CN=2017612633061982209,CN=1513209474796486657,CN=Administrator,CN=First Administrative Group,CN=First Organization,CN=OPENCHANGE,DC=net6a,DC=lan
+cn: 2017612633061982209
+MAPIStoreURI: EasyLinux://CONTACTS/
+PidTagFolderId: 2017612633061982209
+PidTagParentFolderId: 1513209474796486657
+
+# record 33
+dn: CN=73183493944770561,CN=Administrator,CN=First Administrative Group,CN=First Organization,CN=OPENCHANGE,DC=net6a,DC=lan
+cn: 73183493944770561
+MAPIStoreURI: EasyLinux://FALLBACK/0x104000000000001/
+PidTagFolderId: 73183493944770561
+PidTagParentFolderId: 720575940379279361
+PidTagDisplayName: Finder
+
+# record 34
+dn: CN=145241087982698497,CN=Administrator,CN=First Administrative Group,CN=First Organization,CN=OPENCHANGE,DC=net6a,DC=lan
+cn: 145241087982698497
+MAPIStoreURI: EasyLinux://FALLBACK/0x204000000000001/
+PidTagFolderId: 145241087982698497
+PidTagParentFolderId: 720575940379279361
+
+# record 39
+dn: CN=2089670227099910145,CN=1513209474796486657,CN=Administrator,CN=First Administrative Group,CN=First Organization,CN=OPENCHANGE,DC=net6a,DC=lan
+cn: 2089670227099910145
+MAPIStoreURI: EasyLinux://TASKS/
+PidTagFolderId: 2089670227099910145
+PidTagParentFolderId: 1513209474796486657
+
+# record 46
+dn: CN=2233785415175766017,CN=1513209474796486657,CN=Administrator,CN=First Administrative Group,CN=First Organization,CN=OPENCHANGE,DC=net6a,DC=lan
+cn: 2233785415175766017
+MAPIStoreURI: EasyLinux://JOURNAL/
+PidTagFolderId: 2233785415175766017
+PidTagParentFolderId: 1513209474796486657
+
+# record 50
+dn: CN=1801439850948198401,CN=1513209474796486657,CN=Administrator,CN=First Administrative Group,CN=First Organization,CN=OPENCHANGE,DC=net6a,DC=lan
+cn: 1801439850948198401
+MAPIStoreURI: EasyLinux://INBOX/Trash/
+PidTagFolderId: 1801439850948198401
+PidTagParentFolderId: 1513209474796486657
+PidTagDisplayName: Trash
+PidTagContainerClass: IPF.Note
+

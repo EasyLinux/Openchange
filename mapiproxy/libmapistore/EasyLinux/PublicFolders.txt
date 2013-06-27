@@ -1,0 +1,15 @@
+root@OpenChange:/usr/src/EasyLinux/Openchange# openchange_provision --openchangedb
+Setting up openchange db
+Adding root DSE
+[+] Public Folders
+===================
+	* Public Folder Root                      : 0x0100000000000001 (72057594037927937)
+	* IPM_SUBTREE                             : 0x0200000000000001 (144115188075855873)
+	* NON_IPM_SUBTREE                         : 0x0300000000000001 (216172782113783809)
+	* EFORMS REGISTRY                         : 0x0400000000000001 (288230376151711745)
+	* OFFLINE ADDRESS BOOK                    : 0x0500000000000001 (360287970189639681)
+	* /o=First Organization/cn=addrlists/cn=oabs/cn=Default Offline Address Book: 0x0600000000000001 (432345564227567617)
+	* SCHEDULE+ FREE BUSY                     : 0x0700000000000001 (504403158265495553)
+	* EX:/o=first organization/ou=first administrative group: 0x0800000000000001 (576460752303423489)
+	* Events Root                             : 0x0900000000000001 (648518346341351425)
+

@@ -940,6 +940,7 @@ mapiproxy/libmapistore/EasyLinux/MAPIStoreEasyLinux.$(SHLIBEXT).$(LIBEASY_SO_VER
 		mapiproxy/libmapistore/EasyLinux/MAPIStoreEasyLinux.po \
     mapiproxy/libmapistore/EasyLinux/EasyLinux_Common.po \
     mapiproxy/libmapistore/EasyLinux/EasyLinux_Ldap.po \
+    mapiproxy/libmapistore/EasyLinux/EasyLinux_Tdb.po \
     mapiproxy/libmapistore/EasyLinux/EasyLinux_Xml.xpo \
     mapiproxy/libmapistore/EasyLinux/EasyLinux_Calendar.po \
     mapiproxy/libmapistore/EasyLinux/EasyLinux_Contact.po \

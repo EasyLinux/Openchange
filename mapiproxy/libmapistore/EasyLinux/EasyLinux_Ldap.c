@@ -48,9 +48,15 @@
 #define NO		0
 #define BOOL	unsigned int
 
+/*
+ * \detail Find AD to get User informations
+ *
+ * EasyLinux backend is heavily based on AD, Maildir is stored into homeDir of user
+ * we need to get back this information
+ */
 int SetUserInformation(struct EasyLinuxContext *elContext, TALLOC_CTX *mem_ctx, char *User, struct ldb_context *ldb)
 {
-DEBUG(3, ("MAPIEasyLinux : Searching for user(%s) data's\n",User));
+//DEBUG(3, ("MAPIEasyLinux :   Searching for user(%s) data's\n",User));
 const char *expression = "(uid=%s)";
 char *Search;
 const char * const Attribs[] = {"unixHomeDirectory","gidNumber","uidNumber","displayName",NULL};
@@ -62,7 +68,7 @@ Search = talloc_asprintf(mem_ctx,expression,User);
 
 if( LDB_SUCCESS != ldb_search(ldb, mem_ctx, &resultMsg, NULL, LDB_SCOPE_DEFAULT, Attribs, "%s", Search) )
   {
-  DEBUG(0, ("ERROR: MAPIEasyLinux - user informations unavailable !\n"));
+  DEBUG(0, ("ERROR - MAPIEasyLinux - user informations unavailable !\n"));
   return MAPISTORE_ERROR;
   }
 
@@ -84,11 +90,11 @@ for (i = 0; i < resultMsg->count; ++i)
   }
 if( elContext->User.homeDirectory == NULL )
   {  
-  DEBUG(0, ("ERROR: MAPIEasyLinux - user informations unavailable ! No homeDirectory\n"));
+  DEBUG(0, ("ERROR - MAPIEasyLinux - user informations unavailable ! No homeDirectory\n"));
   return MAPISTORE_ERROR;
   }
     
-DEBUG(3, ("MAPIEasyLinux :     User (uid:%i gid:%i displayName:%s homeDirectory:%s) \n", elContext->User.uidNumber, elContext->User.gidNumber, 
+DEBUG(0, ("MAPIEasyLinux :   User (uid:%i gid:%i displayName:%s homeDirectory:%s) \n", elContext->User.uidNumber, elContext->User.gidNumber, 
                                     elContext->User.displayName, elContext->User.homeDirectory));
 talloc_unlink(mem_ctx, Search);
 return MAPISTORE_SUCCESS;
@@ -111,18 +117,18 @@ struct ldb_result *resultMsg;
 struct ldb_message_element *MessageElement;
 int i,j;
 
-DEBUG(0,("MAPIEasyLinux : InitialiseRootFolder\n")); 
+DEBUG(0,("MAPIEasyLinux :   InitialiseRootFolder\n")); 
 
 // We need to find link between URI and FID (64bits)
 Search = talloc_asprintf(mem_ctx,expression,uri);
 if( LDB_SUCCESS != ldb_search(ldb, mem_ctx, &resultMsg, NULL, LDB_SCOPE_DEFAULT, Attribs, "%s", Search) )
   {
-  DEBUG(0, ("ERROR: MAPIEasyLinux - cannot link FID and MAPISToreName - ldb_search\n"));
+  DEBUG(0, ("ERROR - MAPIEasyLinux : cannot link FID and MAPISToreName - ldb_search\n"));
   return MAPISTORE_ERROR;
   }
 if( resultMsg->count == 0 )
   {
-  DEBUG(0, ("ERROR: MAPIEasyLinux - cannot link FID and MAPISToreName - No records found!\n"));
+  DEBUG(0, ("ERROR - MAPIEasyLinux : cannot link FID and MAPISToreName - No records found!\n"));
   return MAPISTORE_ERROR;
   }
 

@@ -121,16 +121,26 @@ static enum mapistore_error BackendCreateContext(TALLOC_CTX *mem_ctx,
                             const char *uri, void **context_object)
 {
 struct EasyLinuxContext *elContext;
-int Len;
+int Len, i;
+char *User, *FullUser, *URL;
+uint64_t  *FMID;
 
-DEBUG(0, ("MAPIEasyLinux : Creating context Uri:%s \n",uri ));  
+DEBUG(0, ("MAPIEasyLinux : Create context Uri:%s \n",uri ));  
 
-Len = strlen(indexingTdb->name);
-Len -= 12;
+for( i=strlen(indexingTdb->name) ; i>0 ; i--)
+  {
+  if( indexingTdb->name[i] == '/' )
+    {
+    Len = i;
+    i=0;
+    }
+  }
+
 
 // Comparer mtime de indexing.tdb aux reps
 // stat(elContext->Indexing->name, &Stat); 
-// DEBUG(0, ("MAPIEasyLinux : Tdb %i\n", Stat.st_mtime));  // time_t        st_mtime;    /* Heure dernière modification   */
+DEBUG(0, ("MAPIEasyLinux : Tdb %s\n", indexingTdb->name));  // time_t        st_mtime;    /* Heure dernière modification   */
+DEBUG(0, ("MAPIEasyLinux : User %s\n", conn_info->username));
 // /var/lib/samba/private/mapistore/Administrator/indexing.tdb
 
 // Initialise Backend structure
@@ -144,7 +154,7 @@ elContext->LdbTable 		= conn_info->oc_ctx;
 elContext->mstore_ctx 	= conn_info->mstore_ctx;
 *context_object 				= (void *)elContext;
 
-//DEBUG(0, ("MAPIEasyLinux : Tdb %s\n", elContext->IndexingPath));  // /var/lib/samba/private/mapistore/Administrator/\0  indexing.tdb
+//DEBUG(0, ("MAPIEasyLinux : Tdb Path %s\n", elContext->IndexingPath));  // /var/lib/samba/private/mapistore/Administrator/\0  indexing.tdb
 
 if( !conn_info )
   {  // We need connection information to get user and Openchange.ldb pointer
@@ -163,7 +173,15 @@ if( !conn_info->oc_ctx )  // We need connection information to get user and Open
 if( InitialiseRootFolder(elContext, mem_ctx, conn_info->username, conn_info->oc_ctx, uri) != MAPISTORE_SUCCESS)
   return MAPISTORE_ERR_CONTEXT_FAILED;
 
-DEBUG(0, ("MAPIEasyLinux : Context created  Uri:%s \n",uri ));  
+// Register in indexing.tdb
+FMID = talloc_zero_size(elContext->mem_ctx, sizeof(uint64_t) );
+*FMID = elContext->RootFolder.FID;
+// uri is like INBOX/Outbox/  must be EasyLinux://INBOX/Outbox or 
+URL = talloc_asprintf(elContext->mem_ctx, "EasyLinux://%s", uri);
+mapistore_indexing_record_add(elContext->mem_ctx,elContext->mstore_ctx->indexing_list, *FMID, URL);
+talloc_unlink(elContext->mem_ctx, FMID);
+
+DEBUG(0, ("MAPIEasyLinux : Context created! \n" ));  
 
 // MAPIStore backend don't include a destructor function capability, we want one 
 talloc_set_destructor((void *)elContext, (int (*)(void *))BackendDestructor);
@@ -215,49 +233,49 @@ static enum mapistore_error BackendListContexts(const char *username, struct tdb
                            struct mapistore_contexts_list **contexts_listp)  // SNOEL contexts_listp  (adresse du pointeur)
 {
 int rc=MAPISTORE_SUCCESS;  // MAPISTORE_ERR_NO_DIRECTORY  MAPISTORE_SUCCESS   MAPISTORE_ERROR
-int i=0;
-struct mapistore_contexts_list *Context, *ContextOld, *ContextNew;
-char *ContextRole[] = {"INBOX","INBOX/Drafts", "INBOX/Sent", "INBOX/Outbox","INBOX/Trash","CALENDAR","CONTACTS","TASKS",
-                     "NOTES","JOURNAL","FALLBACK","MAX"};
-char *NameRole[] = {"Inbox","Drafts", "Sent", "Outbox","Trash","Calendar","Contacts","Tasks",
-                     "Notes","Journal","Fallback","Max"};
-enum mapistore_context_role  Roles[]= {MAPISTORE_MAIL_ROLE, 	MAPISTORE_DRAFTS_ROLE, 	MAPISTORE_SENTITEMS_ROLE,
-                     MAPISTORE_OUTBOX_ROLE, MAPISTORE_DELETEDITEMS_ROLE, MAPISTORE_CALENDAR_ROLE,
-                     MAPISTORE_CONTACTS_ROLE, MAPISTORE_TASKS_ROLE, MAPISTORE_NOTES_ROLE, MAPISTORE_JOURNAL_ROLE,
-                     MAPISTORE_FALLBACK_ROLE, MAPISTORE_MAX_ROLES };
+int i=0, hFile;
+char *ContextsXmlPath, *ContextsXmlFile;
+//struct mapistore_contexts_list *Context, *ContextOld, *ContextNew;
+//char *ContextRole[] = {"INBOX","INBOX/Drafts", "INBOX/Sent", "INBOX/Outbox","INBOX/Trash","CALENDAR","CONTACTS","TASKS",
+//                     "NOTES","JOURNAL","FALLBACK","MAX"};
+//char *NameRole[] = {"Inbox","Drafts", "Sent", "Outbox","Trash","Calendar","Contacts","Tasks",
+//                     "Notes","Journal","Fallback","Max"};
+//enum mapistore_context_role  Roles[]= {MAPISTORE_MAIL_ROLE, 	MAPISTORE_DRAFTS_ROLE, 	MAPISTORE_SENTITEMS_ROLE,
+//                     MAPISTORE_OUTBOX_ROLE, MAPISTORE_DELETEDITEMS_ROLE, MAPISTORE_CALENDAR_ROLE,
+//                     MAPISTORE_CONTACTS_ROLE, MAPISTORE_TASKS_ROLE, MAPISTORE_NOTES_ROLE, MAPISTORE_JOURNAL_ROLE,
+//                     MAPISTORE_FALLBACK_ROLE, MAPISTORE_MAX_ROLES };
 
-// With EasyLinux backend, we proceed slighty different we will auto-provision only on CreateContext because we need 
-// access to AD to retreive homeDirectory
-// We begin by designing all the 'Native' RootFolders 
-ContextOld = NULL;
-ContextNew = NULL;
-for( i=0 ; i < 12 ; i++ )  // 12 represents the 'native' roles
+// Use XML file for storing !
+DEBUG(0,("MAPIEasyLinux : BackendListContexts\n"));
+// Copy full path of indexing.tdb  - /var/lib/samba/private/mapistore/<user>/indexing.tdb
+ContextsXmlPath = talloc_strdup(mem_ctx, indexingTdb->name);
+// Extract path
+for(i=strlen(ContextsXmlPath) ; i>0 ; i--)
   {
-	if( i == 0 )
-	  {
-  	Context = (struct mapistore_contexts_list *)talloc_zero_size(mem_ctx, sizeof(struct mapistore_contexts_list) );
-	  *contexts_listp = Context;
-	  }
+  if(ContextsXmlPath[i] == '/')
+    {
+    ContextsXmlPath[i] = '\0';
+    i=0;
+    }
+  }
+// ContextsXmlFile is like /var/lib/samba/private/mapistore/<user>/Contexts.xml
+ContextsXmlFile = talloc_asprintf(mem_ctx,"%s/Contexts.xml", ContextsXmlPath);  
+DEBUG(0,("MAPIEasyLinux :   --> Contexts: %s\n", ContextsXmlFile));
+talloc_free(ContextsXmlPath);
 
-	Context->url 				 		= talloc_asprintf(mem_ctx,"EasyLinux://%s",ContextRole[i]);
-	Context->name				 		= talloc_strdup(mem_ctx, NameRole[i]);
-	Context->main_folder 		= true;
-	Context->role 					= Roles[i];
-	Context->tag						= talloc_strdup(mem_ctx, "tag");
-	Context->prev	          = ContextOld;
-	
-	if( i < 11 )
-	  {
-		ContextNew = (struct mapistore_contexts_list *)talloc_zero_size(mem_ctx, sizeof(struct mapistore_contexts_list) );
-		Context->next					= ContextNew;
-		ContextOld						= Context;
-		Context								= ContextNew;
-		}
-	else
-		Context->next					= NULL;
-	}
-// Parcourrir indexing.tdb à la recherche de FALLBACK
-//DEBUG(0, ("MAPIEasyLinux : %s \n",indexingTdb->name));
+// Try to open .xml file
+hFile = open(ContextsXmlFile, O_RDONLY);
+if( hFile == -1 )
+  { // Failed, not exists, we will make a new one
+  DEBUG(0, ("MAPIEasyLinux :     --> Not exist -> Create \n"));
+  CreateContextsXml(mem_ctx, ContextsXmlFile);
+  }
+
+// Get Contexts for user
+rc = ListContextsFromXml(mem_ctx, ContextsXmlFile, contexts_listp);
+
+talloc_free(ContextsXmlFile);
+
 DEBUG(0, ("MAPIEasyLinux : BackendListContexts for %s done! \n",username));
 return rc;
 }

@@ -107,20 +107,19 @@ switch(elGeneric->stType)
 
 /*
  *
- * /home/NET6A/Administrator/Maildir/FALLBACK/0x1f04000000000001/
+ * /home/NET6A/Administrator/Maildir/FALLBACK/0x1f04000000000001
  */
-int RecursiveMkDir(struct EasyLinuxUser *elUser, char *Path, mode_t Mode)
+int RecursiveMkDir(char *StartPath, char *Path, int Uid, int Gid, mode_t Mode)
 {
 int LenHomeDir, LenPath, i, j;
 DIR *curPath;
 
-// First test if homeDirectory exist
-
-LenHomeDir = strlen(elUser->homeDirectory);
+// First test if StartPath exist
+LenHomeDir = strlen(StartPath);
 LenPath = strlen(Path);
 Path[LenHomeDir] = 0;
 Path[LenHomeDir] = '/';
-Path[LenPath-1] = 0;
+//Path[LenPath-1] = 0;
 
 // Start from last path to homeDir
 for( i=(LenPath-3) ; i>(LenHomeDir-1) ; i--)
@@ -145,14 +144,14 @@ for( i=0 ; i!= (LenPath-1) ; i++ )
     {
     Path[i] = '/';
     // Create folder
-    DEBUG(3,("MAPIEasyLinux :   --> mkdir %s !\n", Path));
+    DEBUG(0,("MAPIEasyLinux :     --> mkdir %s !\n", Path));
     if( mkdir(Path, Mode) && (EEXIST != errno) )
       {
       DEBUG(0,("ERROR : MAPIEasyLinux - cannot create %s\n",Path));
       DEBUG(0,("ERROR : MAPIEasyLinux - (%s)\n",strerror(errno)));
       return MAPISTORE_ERROR;
       }
-    chown(Path, elUser->uidNumber, elUser->gidNumber);
+    chown(Path, Uid, Gid);
     }
   }
   
