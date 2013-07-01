@@ -184,7 +184,7 @@ char *ImapToMaildir(TALLOC_CTX *, char *);
  */
 int CreateContextsXml(TALLOC_CTX *mem_ctx, char *XmlFile); 
 int ListContextsFromXml(TALLOC_CTX *mem_ctx, char *XmlFile, struct mapistore_contexts_list **Listp); 
-int AddXmlContext( TALLOC_CTX *mem_ctx, char *XmlFile, char *ContextName, char *Main, char *Url,  char *Tag, int Role); 
+int AddXmlContext( TALLOC_CTX *mem_ctx, char *XmlFile, char *ContextName, char *Main, char *Url,  char *Tag); 
  
  
  

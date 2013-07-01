@@ -70,7 +70,7 @@ _PUBLIC_ enum MAPISTATUS emsmdbp_mailbox_provision_public_freebusy(struct emsmdb
 
 	ret = openchangedb_get_PublicFolderID(emsmdbp_ctx->oc_ctx, EMSMDBP_PF_FREEBUSY, &public_fb_fid);
 	if (ret != MAPI_E_SUCCESS) {
-		DEBUG(5, ("provisioning: freebusy root folder not found in openchange.ldb\n"));
+		DEBUG(0, ("ERROR - MAPIEasyLinux : provisioning: freebusy root folder not found in openchange.ldb\n"));
 		goto end;
 	}
 
@@ -218,7 +218,9 @@ FolderId: 0x67ca828f02000001      Display Name: "                        ";  Con
 	bool					exists, reminders_created;
 	void					*backend_object, *backend_table, *backend_message;
 
+
 	mem_ctx = talloc_zero(NULL, TALLOC_CTX);
+  DEBUG(3 ,("MAPIEasyLinux : EMSMDB - Dans emsmdbp_mailbox_provision\n"));
 
 	ldb_transaction_start(emsmdbp_ctx->oc_ctx);
 
@@ -233,7 +235,7 @@ FolderId: 0x67ca828f02000001      Display Name: "                        ";  Con
 	current_entry = contexts_list;
 	while (current_entry) {
 		mapistore_url = current_entry->url;
-
+    DEBUG(3 ,("MAPIEasyLinux : EMSMDB - --> url: %s\n",mapistore_url));
 		if (mapistore_url) {
 			if (mapistore_url[strlen(mapistore_url)-1] != '/') {
 				current_entry->url = talloc_asprintf(mem_ctx, "%s/", mapistore_url);
@@ -251,7 +253,7 @@ FolderId: 0x67ca828f02000001      Display Name: "                        ";  Con
 	ret = openchangedb_get_MAPIStoreURIs(emsmdbp_ctx->oc_ctx, username, mem_ctx, &existing_uris);
 	if (ret == MAPI_E_SUCCESS) {
 		for (i = 0; i < existing_uris->cValues; i++) {
-			/* DEBUG(5, ("checking entry '%s'\n", existing_uris->lppszW[i])); */
+			DEBUG(3, ("MAPIEasyLinux : EMSMDB - checking entry '%s'\n", existing_uris->lppszW[i])); 
 			exists = false;
 			mapistore_url = existing_uris->lppszW[i];
 			if (mapistore_url[strlen(mapistore_url)-1] != '/') {
@@ -259,15 +261,15 @@ FolderId: 0x67ca828f02000001      Display Name: "                        ";  Con
 			}
 			current_entry = contexts_list;
 			while (!exists && current_entry) {
-				/* DEBUG(5, ("  compare with '%s'\n", current_entry->url)); */
+				DEBUG(3, ("MAPIEasyLinux : EMSMDB -  compare with '%s'\n", current_entry->url)); 
 				if (strcmp(mapistore_url, current_entry->url) == 0) {
-					/* DEBUG(5, ("  entry found\n")); */
+					DEBUG(3, ("MAPIEasyLinux : EMSMDB -  entry found '%s'\n", current_entry->url)); 
 					exists = true;
 				}
 				current_entry = current_entry->next;
 			}
 			if (!exists) {
-				DEBUG(5, ("  removing entry '%s'\n", mapistore_url));
+				DEBUG(3, ("ERROR - MAPIEasyLinux : EMSMDB -    removing entry '%s'\n", mapistore_url));
 				openchangedb_get_fid(emsmdbp_ctx->oc_ctx, mapistore_url, &found_fid);
 				openchangedb_delete_folder(emsmdbp_ctx->oc_ctx, found_fid);
 			}
@@ -275,9 +277,11 @@ FolderId: 0x67ca828f02000001      Display Name: "                        ";  Con
 	}
 
 	container_classes = talloc_array(mem_ctx, const char *, MAPISTORE_MAX_ROLES);
+	// All container_classes are IPF.Note
 	for (i = MAPISTORE_MAIL_ROLE; i < MAPISTORE_MAX_ROLES; i++) {
 		container_classes[i] = "IPF.Note";
 	}
+	//   Except those
 	container_classes[MAPISTORE_CALENDAR_ROLE] = "IPF.Appointment";
 	container_classes[MAPISTORE_CONTACTS_ROLE] = "IPF.Contact";
 	container_classes[MAPISTORE_TASKS_ROLE] 	 = "IPF.Task";
@@ -296,8 +300,8 @@ FolderId: 0x67ca828f02000001      Display Name: "                        ";  Con
 		current_entry->prev = NULL;
 		if (current_entry->main_folder) {
 			if (main_entries[current_entry->role]) {
-				DEBUG(5, ("duplicate entry for role %d ignored\n  existing entry: %s\n  current entry: %s\n",
-					  current_entry->role, main_entries[current_entry->role]->url, current_entry->url));
+				DEBUG(0, ("ERROR - MAPIEasyLinux : EMSMDB - duplicate entry for role %d ignored, existing entry: %s  current entry: %s\n",
+				    current_entry->role, main_entries[current_entry->role]->url, current_entry->url));
 			}
 			else {
 				main_entries[current_entry->role] = current_entry;
@@ -311,7 +315,7 @@ FolderId: 0x67ca828f02000001      Display Name: "                        ";  Con
 
 	/* Fallback role MUST exist */
 	if (!main_entries[MAPISTORE_FALLBACK_ROLE]) {
-		DEBUG(5, ("No fallback provisioning role was found while such role is mandatory. Provisiong must be done manually.\n"));
+		DEBUG(0, ("ERROR - MAPIEasyLinux : EMSMDB - No fallback provisioning role was found while such role is mandatory. Provisiong must be done manually.\n"));
 		talloc_free(mem_ctx);
 		return MAPI_E_DISK_ERROR;
 	}
@@ -577,7 +581,9 @@ FolderId: 0x67ca828f02000001      Display Name: "                        ";  Con
 	}
 
 	/** create root/Freebusy Data folder + "LocalFreebusy" message (OXODLGT) */
-	/* FIXME: the problem here is that only the owner of a mailbox can create the delegation message and its container, meaning that when sharing an object, a delegate must at least login once to OpenChange before any one subscribes to his resources */
+	/* FIXME: the problem here is that only the owner of a mailbox can create the delegation message and its container, 
+	          meaning that when sharing an object, a delegate must at least login once to OpenChange before any one 
+	          subscribes to his resources */
 	if (strcmp(emsmdbp_ctx->username, username) == 0) {
 		struct mapi_SRestriction restriction;
 		uint8_t status;
@@ -585,6 +591,7 @@ FolderId: 0x67ca828f02000001      Display Name: "                        ";  Con
 		/* find out whether the "Freebusy Data" folder exists at the mailbox root */
 		ret = openchangedb_get_fid_by_name(emsmdbp_ctx->oc_ctx, mailbox_fid, "Freebusy Data", &current_fid);
 		if (ret == MAPI_E_NOT_FOUND) {
+		  DEBUG(0, ("ERROR - MAPIEasyLinux : EMSMDB - 'Freebusy Data' not found !\n"));
 			/* create the folder */
 			openchangedb_get_new_folderID(emsmdbp_ctx->oc_ctx, &current_fid);
 			openchangedb_get_new_changeNumber(emsmdbp_ctx->oc_ctx, &current_cn);

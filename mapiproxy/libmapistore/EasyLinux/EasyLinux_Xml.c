@@ -71,9 +71,9 @@ xmlNodePtr 	root_node = NULL, context_node = NULL;		// node pointers
 int i;
 char *Url, *iRole;
 char *ContextRole[] = {"INBOX","INBOX/Drafts", "INBOX/Sent", "INBOX/Outbox","INBOX/Trash","CALENDAR","CONTACTS","TASKS",
-                     "NOTES","JOURNAL","FALLBACK","MAX"};
+                     "NOTES","JOURNAL","FALLBACK"};
 char *NameRole[] = {"Inbox","Drafts", "Sent", "Outbox","Trash","Calendar","Contacts","Tasks",
-                     "Notes","Journal","Fallback","Max"};
+                     "Notes","Journal","Fallback"};
 enum mapistore_context_role  Roles[]= {MAPISTORE_MAIL_ROLE, 	MAPISTORE_DRAFTS_ROLE, 	MAPISTORE_SENTITEMS_ROLE,
                      MAPISTORE_OUTBOX_ROLE, MAPISTORE_DELETEDITEMS_ROLE, MAPISTORE_CALENDAR_ROLE,
                      MAPISTORE_CONTACTS_ROLE, MAPISTORE_TASKS_ROLE, MAPISTORE_NOTES_ROLE, MAPISTORE_JOURNAL_ROLE,
@@ -84,7 +84,7 @@ doc = xmlNewDoc(BAD_CAST "1.0");
 root_node = xmlNewNode(NULL, BAD_CAST "Contexts");
 xmlDocSetRootElement(doc, root_node);
 
-for(i=0 ; i<12 ; i++ )
+for(i=0 ; i<MAPISTORE_MAX_ROLES ; i++ )
   {
   context_node = xmlNewChild(root_node, NULL, BAD_CAST "Context", NULL);  
   xmlSetProp(context_node, BAD_CAST "name", BAD_CAST NameRole[i]);
@@ -111,14 +111,41 @@ return MAPISTORE_SUCCESS;
 /*
  * 
  */
-int AddXmlContext(TALLOC_CTX *mem_ctx, char *XmlFile, char *ContextName, char *Main, char *Url,  char *Tag, int Role)
+int AddXmlContext(TALLOC_CTX *mem_ctx, char *XmlFile, char *ContextName, char *Main, char *Url,  char *Tag)
 {
 xmlDocPtr xmldoc = NULL;
-xmlNodePtr root_node, context_node;
+xmlNodePtr root_node, context_node, n, m;
 char *iRole;
+xmlChar *Content;
+int Role=0, Val;
 
 xmldoc = xmlParseFile(XmlFile);
 root_node = xmlDocGetRootElement(xmldoc);
+// We need to allocate next RoleID
+for (n = root_node->children; n != NULL; n = n->next) 
+  { 
+  if( n->type == XML_ELEMENT_NODE)
+    {
+  	// retrieve role informations 
+    for( m = n->children ; m != NULL ; m = m->next )
+      {
+      if( m->type == XML_ELEMENT_NODE )
+        {
+        Content = xmlNodeGetContent(m);
+        if( strcmp((char *)m->name,"Role") == 0 )
+          {
+          Val = atoi((char *)Content);
+          if( Val > Role )
+            Role = Val;
+          }
+        xmlFree(Content);
+        }
+      }
+    }
+  }
+// Role contains now max(Role)
+Role++;
+
 context_node = xmlNewChild(root_node, NULL, BAD_CAST "Context", NULL);  
 xmlSetProp(context_node, BAD_CAST "name", BAD_CAST ContextName);
 xmlNewChild(context_node, NULL, BAD_CAST "Main", BAD_CAST Main);
@@ -172,7 +199,7 @@ if (racine == NULL)
   xmlFreeDoc(xmldoc);
   return MAPISTORE_ERR_BACKEND_INIT;
   }
-DEBUG(0 ,("MAPIEasyLinux :     --> %s\n", racine->name));
+DEBUG(3 ,("MAPIEasyLinux :     --> %s\n", racine->name));
 
 // Scan contexts
 PrevContext = NULL;
@@ -210,7 +237,7 @@ for (n = racine->children; n != NULL; n = n->next)
           Context->tag 				 		= talloc_strdup(mem_ctx,(char *)Content);
         if( strcmp((char *)m->name,"Role") == 0 )
           Context->role 				 		= atoi((char *)Content);
-        DEBUG(0, ("MAPIEasyLinux :        --> %s - %s\n", m->name, Content));
+        DEBUG(3, ("MAPIEasyLinux :        --> %s - %s\n", m->name, Content));
         xmlFree(Content);
         }
       }

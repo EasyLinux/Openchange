@@ -555,6 +555,7 @@ _PUBLIC_ enum MAPISTATUS openchangedb_get_MAPIStoreURIs(struct ldb_context *ldb_
 
 	local_mem_ctx = talloc_named(NULL, 0, "openchangedb_get_fid");
 
+DEBUG(3 ,("MAPIEasyLinux - OPENCHANGEDB ldb_search(&(cn='%s')(MailboxGUID=*))\n",username));
 	/* fetch mailbox DN */
 	ret = ldb_search(ldb_ctx, local_mem_ctx, &res, ldb_get_default_basedn(ldb_ctx),
 			 LDB_SCOPE_SUBTREE, attrs, "(&(cn=%s)(MailboxGUID=*))", username);
@@ -1597,6 +1598,7 @@ _PUBLIC_ enum MAPISTATUS openchangedb_get_fid_by_name(struct ldb_context *ldb_ct
 
 	mem_ctx = talloc_named(NULL, 0, "get_fid_by_name");
 
+  DEBUG(3, ("MAPIEasyLinux - OPENCHANGEDB - openchangedb_get_fid_by_name ldb_search(..,(&(PidTagParentFolderId=%"PRIu64")(PidTagDisplayName=%s)))",parent_fid, foldername));
 	ret = ldb_search(ldb_ctx, mem_ctx, &res, ldb_get_default_basedn(ldb_ctx),
 			 LDB_SCOPE_SUBTREE, attrs,
 			 "(&(PidTagParentFolderId=%"PRIu64")(PidTagDisplayName=%s))",

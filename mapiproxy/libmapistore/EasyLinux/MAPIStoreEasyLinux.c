@@ -136,13 +136,6 @@ for( i=strlen(indexingTdb->name) ; i>0 ; i--)
     }
   }
 
-
-// Comparer mtime de indexing.tdb aux reps
-// stat(elContext->Indexing->name, &Stat); 
-DEBUG(0, ("MAPIEasyLinux : Tdb %s\n", indexingTdb->name));  // time_t        st_mtime;    /* Heure dernière modification   */
-DEBUG(0, ("MAPIEasyLinux : User %s\n", conn_info->username));
-// /var/lib/samba/private/mapistore/Administrator/indexing.tdb
-
 // Initialise Backend structure
 elContext = (struct EasyLinuxContext *)talloc_zero_size(mem_ctx, sizeof(struct EasyLinuxContext) );
 elContext->stType 			= EASYLINUX_BACKEND;
@@ -172,14 +165,6 @@ if( !conn_info->oc_ctx )  // We need connection information to get user and Open
 // Initialise Root Folder (in Easyinux_Ldap.c)  
 if( InitialiseRootFolder(elContext, mem_ctx, conn_info->username, conn_info->oc_ctx, uri) != MAPISTORE_SUCCESS)
   return MAPISTORE_ERR_CONTEXT_FAILED;
-
-// Register in indexing.tdb
-FMID = talloc_zero_size(elContext->mem_ctx, sizeof(uint64_t) );
-*FMID = elContext->RootFolder.FID;
-// uri is like INBOX/Outbox/  must be EasyLinux://INBOX/Outbox or 
-URL = talloc_asprintf(elContext->mem_ctx, "EasyLinux://%s", uri);
-mapistore_indexing_record_add(elContext->mem_ctx,elContext->mstore_ctx->indexing_list, *FMID, URL);
-talloc_unlink(elContext->mem_ctx, FMID);
 
 DEBUG(0, ("MAPIEasyLinux : Context created! \n" ));  
 

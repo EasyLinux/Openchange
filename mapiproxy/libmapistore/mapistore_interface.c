@@ -64,8 +64,6 @@ _PUBLIC_ struct mapistore_context *mapistore_init(TALLOC_CTX *mem_ctx, struct lo
 		DEBUG(5, ("private directory was not returned from configuration\n"));
 		return NULL;
 	}
-
-  DEBUG(0, ("SNOEL: private directory is %s/mapistore \n",private_dir));
   
 	mapping_path = talloc_asprintf(NULL, "%s/mapistore", private_dir);
 	mkdir(mapping_path, 0700);
@@ -215,7 +213,6 @@ _PUBLIC_ enum mapistore_error mapistore_add_context(struct mapistore_context *ms
 		/* ensure the user mapistore directory exists before any mapistore operation occurs */
 		mapistore_dir = talloc_asprintf(mem_ctx, "%s/%s", mapistore_get_mapping_path(), owner);
 		mkdir(mapistore_dir, 0700);
-    DEBUG(0,("SNOEL: AddContext mkdir(%s)\n",mapistore_dir));
     
 		mapistore_indexing_add(mstore_ctx, owner, &ictx);
 		/* mapistore_indexing_add_ref_count(ictx); */
@@ -223,7 +220,7 @@ _PUBLIC_ enum mapistore_error mapistore_add_context(struct mapistore_context *ms
 		backend_uri = talloc_strdup(mem_ctx, &namespace[3]);
 		namespace[3] = '\0';
 		retval = mapistore_backend_create_context(mstore_ctx, mstore_ctx->conn_info, ictx->index_ctx, namespace_start, backend_uri, fid, &backend_ctx);
-		DEBUG(0,("SNOEL: AddContext launch backent.create_context\n"));
+		DEBUG(0,("SNOEL: AddContext launch backend.create_context\n"));
 		if (retval != MAPISTORE_SUCCESS) {
 			return retval;
 		}
@@ -241,6 +238,7 @@ _PUBLIC_ enum mapistore_error mapistore_add_context(struct mapistore_context *ms
 		*backend_object = backend_list->ctx->root_folder_object;
 		DLIST_ADD_END(mstore_ctx->context_list, backend_list, struct backend_context_list *);
 	} else {
+		DEBUG(0, ("ERROR - MAPIEasyLinux : Invalid URI '%s'\n", uri));
 		DEBUG(0, ("[%s:%d]: Error - Invalid URI '%s'\n", __FUNCTION__, __LINE__, uri));
 		talloc_free(mem_ctx);
 		return MAPISTORE_ERR_INVALID_NAMESPACE;
@@ -310,8 +308,11 @@ _PUBLIC_ enum mapistore_error mapistore_search_context_by_uri(struct mapistore_c
 
 	if (!uri) return MAPISTORE_ERROR;
 
+DEBUG(0, ("MAPIEasyLinux - SEARCH %s\n",uri));
 	backend_ctx = mapistore_backend_lookup_by_uri(mstore_ctx->context_list, uri);
 	MAPISTORE_RETVAL_IF(!backend_ctx, MAPISTORE_ERR_NOT_FOUND, NULL);
+
+DEBUG(0, ("MAPIEasyLinux - SEARCH Found! \n"));
 
 	*context_id = backend_ctx->context_id;
 	*backend_object = backend_ctx->root_folder_object;

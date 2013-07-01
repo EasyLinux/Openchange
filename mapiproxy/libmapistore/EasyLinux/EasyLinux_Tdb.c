@@ -73,7 +73,7 @@ DEBUG(0 ,("MAPIEasyLinux :   Open Fallback\n"));
 Path     = talloc_asprintf(elContext->mem_ctx,"%s/Maildir/FALLBACK/%s",elContext->User.homeDirectory, elContext->RootFolder.displayName);
 xmlFile  = talloc_asprintf(elContext->mem_ctx,"%s/Contexts.xml",elContext->IndexingPath);  
 FullPath = talloc_asprintf(elContext->mem_ctx,"%s/%s.tdb",Path, elContext->RootFolder.displayName);
-Url      = talloc_asprintf(elContext->mem_ctx,"EasyLinux://FALLBACK/%lX/%s.tdb",elContext->RootFolder.FID, elContext->RootFolder.displayName);
+Url      = talloc_asprintf(elContext->mem_ctx,"EasyLinux://FALLBACK/0x%.16lX/",elContext->RootFolder.FID);
 
 // Try to open Path - /home/NET6A/Administrator/Maildir/FALLBACK/Finder.tdb
 hFile = open(FullPath, O_RDONLY);
@@ -110,12 +110,12 @@ if( hFile == -1 )
   
   // We need to add in Contexts.xml
   DEBUG(0, ("MAPIEasyLinux :   --> Contexts.xml AddContext(%s) \n",elContext->RootFolder.displayName));  
-  AddXmlContext( elContext->mem_ctx, xmlFile, elContext->RootFolder.displayName, "true", Url, "tag", MAPISTORE_FALLBACK_ROLE);
+  AddXmlContext( elContext->mem_ctx, xmlFile, elContext->RootFolder.displayName, "true", Url, "tag");
   
   }
 else
   { // File exist
-  DEBUG(0, ("MAPIEasyLinux :   --> %s exist! \n",Path));
+  DEBUG(0, ("MAPIEasyLinux :   --> %s exist \n",Path));
   close(hFile);
   }
    
